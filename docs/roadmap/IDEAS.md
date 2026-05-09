@@ -45,6 +45,10 @@ On the boot screen, display a subtle message: "Running on community support. If 
 
  If the microVM crashes or the LiveOS detects a hardware error, the software should default to blocking the transfer and displaying an error code, rather than allowing the data through. 
 
+ **Automate SBOM**
+
+ Current SBOM creation is manual. Find way to automate it.
+
  ## Testing
 
  See if not some of the manual tests could be automated.
