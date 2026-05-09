@@ -1,0 +1,557 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "serialNumber": "urn:uuid:3e671687-395b-41f5-a30f-a58921a69b79",
+  "metadata": {
+    "timestamp": "2026-05-07T13:06:50Z",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "troskel-sbom-generator",
+          "version": "1.0.0",
+          "vendor": "troskel-project",
+          "description": "SBOM generation for Troskelproject"
+        }
+      ]
+    },
+    "component": {
+      "type": "application",
+      "name": "troskel",
+      "version": "1.0.0",
+      "description": "Air-Gapped file-crossing scanner",
+      "supplier": {
+        "name": "Diskret Team"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:generic/troskel@1.0.0",
+      "properties": [
+        {
+          "name": "project-type",
+          "value": "security-tool"
+        },
+        {
+          "name": "deployment-model",
+          "value": "air-gapped"
+        }
+      ]
+    },
+    "manufacture": {
+      "name": "Diskret"
+    },
+    "authors": [
+      {
+        "name": "Troskel Team"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "operating-system",
+      "name": "fedora-coreos",
+      "version": "1.5.0",
+      "description": "CoreOS variant for scanning host",
+      "supplier": {
+        "name": "Fedora Project"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:generic/fedora-coreos@1.5.0",
+      "externalReferences": [
+        {
+          "url": "https://fedoraproject.org/coreos",
+          "type": "website"
+        }
+      ],
+      "properties": [
+        {
+          "name": "role",
+          "value": "host-os"
+        },
+        {
+          "name": "boot-mode",
+          "value": "live-ram"
+        }
+      ]
+    },
+    {
+      "type": "container",
+      "name": "coreos-installer",
+      "version": "release",
+      "description": "CoreOS installation tool",
+      "supplier": {
+        "name": "Fedora Project"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:generic/coreos-installer@release",
+      "externalReferences": [
+        {
+          "url": "https://quay.io/coreos/coreos-installer",
+          "type": "registry"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "firecracker",
+      "version": "1.7.0",
+      "description": "MicroVM hypervisor for isolated scanning",
+      "supplier": {
+        "name": "Amazon Web Services"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:github/firecracker-microvm/firecracker@1.7.0",
+      "externalReferences": [
+        {
+          "url": "https://github.com/firecracker-microvm/firecracker",
+          "type": "website"
+        },
+        {
+          "url": "https://firecracker-microvm.github.io",
+          "type": "documentation"
+        }
+      ],
+      "properties": [
+        {
+          "name": "security-role",
+          "value": "hypervisor-boundary"
+        },
+        {
+          "name": "attack-surface",
+          "value": "minimal"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "clamav",
+      "version": "latest",
+      "description": "Signature-based antivirus engine",
+      "supplier": {
+        "name": "ClamAV Team"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:debian/clamav@latest",
+      "externalReferences": [
+        {
+          "url": "https://www.clamav.net",
+          "type": "website"
+        }
+      ],
+      "properties": [
+        {
+          "name": "detection-type",
+          "value": "signature-based"
+        },
+        {
+          "name": "coverage",
+          "value": "commodity-malware"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "name": "clamav-signatures",
+      "version": "dynamic",
+      "description": "ClamAV signature database (updated regularly)",
+      "supplier": {
+        "name": "ClamAV Team"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:generic/clamav-signatures@dynamic",
+      "properties": [
+        {
+          "name": "update-frequency",
+          "value": "daily"
+        },
+        {
+          "name": "freshness-gate",
+          "value": "30-days"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "name": "eff-large-wordlist",
+      "version": "2016-07-18",
+      "description": "EFF Long Wordlist for diceware passphrase generation",
+      "supplier": {
+        "name": "Electronic Frontier Foundation"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "CC-BY-3.0"
+          }
+        }
+      ],
+      "purl": "pkg:generic/eff-large-wordlist@2016-07-18",
+      "externalReferences": [
+        {
+          "url": "https://www.eff.org/dice",
+          "type": "website"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "addd35536511597a02fa0a9ff1e5284677b8883b83e986e43f15a3db996b903e"
+        }
+      ],
+      "properties": [
+        {
+          "name": "role",
+          "value": "passphrase-generation"
+        },
+        {
+          "name": "vendored-via",
+          "value": "scripts/download-wordlist.sh"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "loki-rs",
+      "version": "2.10.0",
+      "description": "YARA-rule and IOC scanner",
+      "supplier": {
+        "name": "Neo23x0"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-3.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:github/Neo23x0/Loki-RS@2.10.0",
+      "externalReferences": [
+        {
+          "url": "https://github.com/Neo23x0/Loki-RS",
+          "type": "website"
+        }
+      ],
+      "properties": [
+        {
+          "name": "detection-type",
+          "value": "yara-rules"
+        },
+        {
+          "name": "coverage",
+          "value": "apt-artifacts,hack-tools,web-shells"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "name": "yara-forge-core-rules",
+      "version": "dynamic",
+      "description": "YARA Forge Core rule set for LOKI-RS",
+      "supplier": {
+        "name": "YARA Forge"
+      },
+      "purl": "pkg:generic/yara-forge-core@dynamic",
+      "properties": [
+        {
+          "name": "update-method",
+          "value": "loki-util-update"
+        },
+        {
+          "name": "curated",
+          "value": "true"
+        }
+      ]
+    },
+    {
+      "type": "operating-system",
+      "name": "debian",
+      "version": "trixie",
+      "description": "Guest OS for scanner microVM",
+      "supplier": {
+        "name": "Debian Project"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:generic/debian@trixie",
+      "externalReferences": [
+        {
+          "url": "https://www.debian.org",
+          "type": "website"
+        }
+      ],
+      "properties": [
+        {
+          "name": "role",
+          "value": "guest-os"
+        },
+        {
+          "name": "variant",
+          "value": "minbase"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "butane",
+      "version": "latest",
+      "description": "CoreOS Butane config compiler (Butane to Ignition)",
+      "supplier": {
+        "name": "Fedora Project"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-2-Clause"
+          }
+        }
+      ],
+      "purl": "pkg:github/coreos/butane@latest",
+      "externalReferences": [
+        {
+          "url": "https://github.com/coreos/butane",
+          "type": "website"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "busybox",
+      "version": "latest",
+      "description": "Minimal Unix utilities for guest",
+      "supplier": {
+        "name": "BusyBox Team"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:debian/busybox@latest",
+      "properties": [
+        {
+          "name": "variant",
+          "value": "static"
+        }
+      ]
+    },
+    {
+      "type": "firmware",
+      "name": "vmlinux",
+      "version": "1.7.x",
+      "description": "Firecracker-compatible guest kernel",
+      "supplier": {
+        "name": "AWS Firecracker"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:generic/firecracker-vmlinux@1.7.x",
+      "externalReferences": [
+        {
+          "url": "https://github.com/firecracker-microvm/firecracker",
+          "type": "website"
+        }
+      ],
+      "properties": [
+        {
+          "name": "compatibility",
+          "value": "firecracker-1.7"
+        },
+        {
+          "name": "interface",
+          "value": "virtio-mmio"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "name": "debootstrap",
+      "version": "latest",
+      "description": "Debian system bootstrap tool",
+      "supplier": {
+        "name": "Debian Project"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:debian/debootstrap@latest"
+    },
+    {
+      "type": "application",
+      "name": "e2fsprogs",
+      "version": "latest",
+      "description": "Ext4 filesystem tools",
+      "supplier": {
+        "name": "Ext4 Team"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "purl": "pkg:debian/e2fsprogs@latest"
+    },
+    {
+      "type": "application",
+      "name": "zincati",
+      "version": "latest",
+      "description": "CoreOS auto-update daemon (disabled in production)",
+      "supplier": {
+        "name": "Fedora Project"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:generic/zincati@latest",
+      "properties": [
+        {
+          "name": "production-status",
+          "value": "masked-disabled"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:generic/troskel@1.0.0",
+      "dependsOn": [
+        "pkg:generic/fedora-coreos@1.5.0",
+        "pkg:github/firecracker-microvm/firecracker@1.7.0",
+        "pkg:debian/clamav@latest",
+        "pkg:github/Neo23x0/Loki-RS@2.10.0",
+        "pkg:generic/debian@trixie"
+      ]
+    },
+    {
+      "ref": "pkg:github/firecracker-microvm/firecracker@1.7.0",
+      "dependsOn": [
+        "pkg:generic/firecracker-vmlinux@1.7.x"
+      ]
+    },
+    {
+      "ref": "pkg:debian/clamav@latest",
+      "dependsOn": [
+        "pkg:generic/clamav-signatures@dynamic"
+      ]
+    },
+    {
+      "ref": "pkg:github/Neo23x0/Loki-RS@2.10.0",
+      "dependsOn": [
+        "pkg:generic/yara-forge-core@dynamic"
+      ]
+    },
+    {
+      "ref": "pkg:generic/fedora-coreos@1.5.0",
+      "dependsOn": [
+        "pkg:github/coreos/butane@latest",
+        "pkg:generic/coreos-installer@release",
+        "pkg:generic/zincati@latest"
+      ]
+    }
+  ],
+  "vulnerabilities": [],
+  "compositions": [
+    {
+      "aggregate": "incomplete",
+      "assemblies": [
+        "pkg:generic/troskel@1.0.0"
+      ],
+      "note": "SBOM generated from project documentation; some dynamic components (signatures, rules) updated regularly"
+    }
+  ],
+  "annotations": [
+    {
+      "subject": "pkg:generic/troskel@1.0.0",
+      "annotator": {
+        "organization": {
+          "name": "troskel-project"
+        }
+      },
+      "timestamp": "2026-05-07T13:06:50Z",
+      "annotation": "SBOM reflects air-gapped file scanner architecture with multi-engine detection (ClamAV + LOKI-RS) running in sandbox (Firecracker) microVM"
+    }
+  ],
+  "properties": [
+    {
+      "name": "architecture-pattern",
+      "value": "usb-air-gapped"
+    },
+    {
+      "name": "detection-engines",
+      "value": "clamav,loki-rs"
+    },
+    {
+      "name": "virtualization",
+      "value": "firecracker-microvm"
+    },
+    {
+      "name": "network-isolation",
+      "value": "air-gapped"
+    },
+    {
+      "name": "persistence",
+      "value": "none"
+    },
+    {
+      "name": "signature-freshness-gate",
+      "value": "30-days"
+    }
+  ]
+}

@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# scripts/build-scanner-image.sh
+set -euo pipefail
+
+[ "$(id -u)" -eq 0 ] || { echo "[!] Must be run as root."; exit 1; }
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=../config/versions.env
+source "${SCRIPT_DIR}/../config/versions.env"
+
+[ -n "${DEBIAN_RELEASE:-}" ] \
+    || { echo "[!] DEBIAN_RELEASE not set — check config/versions.env"; exit 1; }
+
+SIGDIR="/var/lib/troskel"
+LOKI_HOST_DIR="/opt/loki-rs"
+WORK="$(mktemp -d --tmpdir fc-rootfs-XXXXXX)"
+OUTPUT="${SIGDIR}/scanner-rootfs.ext4"
+SIZE="4G"
+
+cleanup() {
+    umount -lf "${WORK}/proc"    2>/dev/null || true
+    umount -lf "${WORK}/sys"     2>/dev/null || true
+    umount -lf "${WORK}/dev/pts" 2>/dev/null || true
+    umount -lf "${WORK}/dev"     2>/dev/null || true
+    rm -rf "$WORK"
+}
+trap cleanup EXIT
+
+# Sanity-check inputs before doing the slow debootstrap.
+[ -d "${SIGDIR}/clamav-db" ]  \
+    || { echo "[!] Missing ${SIGDIR}/clamav-db — run download-latest-signatures.sh first."; exit 1; }
+[ -d "${SIGDIR}/yara-rules" ] \
+    || { echo "[!] Missing ${SIGDIR}/yara-rules — run download-yara-rules.sh first."; exit 1; }
+[ -x "${LOKI_HOST_DIR}/loki" ] \
+    || { echo "[!] Missing ${LOKI_HOST_DIR}/loki — run prepare-build-machine.sh first."; exit 1; }
+[ -f "${SCRIPT_DIR}/../guest/run-scan.sh" ] \
+    || { echo "[!] Missing guest/run-scan.sh — is the repo complete?"; exit 1; }
+[ -f "${SCRIPT_DIR}/../guest/inittab" ] \
+    || { echo "[!] Missing guest/inittab — is the repo complete?"; exit 1; }
+
+echo "[*] Bootstrapping Debian ${DEBIAN_RELEASE}..."
+debootstrap --arch=amd64 --variant=minbase --include=ca-certificates \
+    "$DEBIAN_RELEASE" "$WORK" https://deb.debian.org/debian
+
+echo "[*] Installing ClamAV..."
+chroot "$WORK" /bin/bash -c '
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get install -y --no-install-recommends clamav busybox-static
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+    systemctl disable clamav-freshclam 2>/dev/null || true
+'
+
+echo "[*] Injecting ClamAV signatures..."
+# Copy only the database files, not whatever else might be in the source dir
+# (e.g. test files left behind by manual debugging).
+cp "${SIGDIR}/clamav-db"/*.cvd "${WORK}/var/lib/clamav/" 2>/dev/null || true
+cp "${SIGDIR}/clamav-db"/*.cld "${WORK}/var/lib/clamav/" 2>/dev/null || true
+cp "${SIGDIR}/clamav-db"/*.cdb "${WORK}/var/lib/clamav/" 2>/dev/null || true
+cp "${SIGDIR}/clamav-db"/*.fp  "${WORK}/var/lib/clamav/" 2>/dev/null || true
+
+echo "[*] Installing LOKI-RS..."
+# LOKI-RS is a single-binary scanner that expects its `signatures/` tree
+# adjacent to the binary (see Loki-RS README, "Signatures"). We replicate
+# the build-station install layout inside the guest at /opt/loki-rs, then
+# overwrite the bundled signatures with the freshly-downloaded YARA Forge
+# Core ruleset.
+mkdir -p "${WORK}/opt/loki-rs"
+cp -r "${LOKI_HOST_DIR}/." "${WORK}/opt/loki-rs/"
+# Replace the tarball-bundled (and already stale) signatures with the
+# refreshed copy. download-yara-rules.sh just ran loki-util update on the
+# build station; this is the same data, materialised into the rootfs.
+rm -rf "${WORK}/opt/loki-rs/signatures"
+mkdir -p "${WORK}/opt/loki-rs/signatures"
+cp -r "${SIGDIR}/yara-rules/." "${WORK}/opt/loki-rs/signatures/"
+
+echo "[*] Installing guest scan entrypoint..."
+cp "${SCRIPT_DIR}/../guest/run-scan.sh" "${WORK}/usr/local/bin/run-scan.sh"
+chmod +x "${WORK}/usr/local/bin/run-scan.sh"
+
+echo "[*] Installing guest inittab..."
+cp "${SCRIPT_DIR}/../guest/inittab" "${WORK}/etc/inittab"
+
+ln -sf /bin/busybox "${WORK}/sbin/init" 2>/dev/null || true
+
+echo "[*] Creating scanner image..."
+truncate -s "$SIZE" "$OUTPUT"
+mkfs.ext4 -F -d "$WORK" "$OUTPUT"
+e2fsck -fn "$OUTPUT" && echo "[+] Image verified OK."
+
+sha256sum "$OUTPUT" > "${OUTPUT}.sha256"
+echo "[+] Image written to: $OUTPUT"
+echo "[+] SHA-256: $(cat "${OUTPUT}.sha256")"

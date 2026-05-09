@@ -1,0 +1,61 @@
+variant: fcos
+version: 1.5.0
+
+passwd:
+  users:
+    - name: scanner
+      groups: [kvm, wheel]
+      # The hash below is a sentinel. prepare-boot-usb.sh generates a
+      # fresh passphrase at build time, hashes it with openssl passwd -6,
+      # and substitutes the hash into a temp copy of this file before
+      # invoking butane. Do not edit by hand — the committed value is
+      # not a usable hash.
+      password_hash: "@@SCANNER_PASSWORD_HASH@@"
+
+storage:
+  files:
+
+    - path: /usr/local/bin/load-scanner
+      mode: 0755
+      contents:
+        local: host-scripts/load-scanner
+
+    - path: /usr/local/bin/scan-wrap
+      mode: 0755
+      contents:
+        local: host-scripts/scan-wrap
+
+    - path: /usr/local/bin/troskel
+      mode: 0755
+      contents:
+        local: host-scripts/troskel
+
+    - path: /usr/local/bin/show-status
+      mode: 0755
+      contents:
+        local: host-scripts/show-status
+
+    - path: /usr/local/bin/check-system-ready
+      mode: 0755
+      contents:
+        local: host-scripts/check-system-ready
+
+systemd:
+  units:
+    - name: load-scanner.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Load scanner image from data USB into RAM
+        After=local-fs.target
+        Before=getty@tty1.service
+        [Service]
+        Type=oneshot
+        ExecStart=/usr/local/bin/load-scanner
+        RemainAfterExit=yes
+        StandardOutput=journal+console
+        [Install]
+        WantedBy=multi-user.target
+
+    - name: zincati.service
+      mask: true

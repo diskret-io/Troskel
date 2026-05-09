@@ -1,0 +1,16 @@
+#!/bin/bash
+set -euo pipefail
+SCAN_DEV="${1:-}"
+if [ -z "$SCAN_DEV" ]; then
+    SCAN_DEV="$(lsblk -dpno NAME,HOTPLUG | awk '$2==1{print $1}' | tail -1)"
+    [ -n "$SCAN_DEV" ] \
+        || { echo "[!] No USB detected. Insert file USB and try again."; exit 1; }
+    echo "[*] Detected file USB: $SCAN_DEV"
+fi
+mkdir -p /mnt/usb
+mount -o ro "$SCAN_DEV" /mnt/usb \
+    || { echo "[!] Failed to mount $SCAN_DEV."; exit 1; }
+echo "[+] File USB mounted read-only."
+/usr/local/bin/scan-wrap /mnt/usb
+umount /mnt/usb 2>/dev/null || true
+echo "[+] File USB unmounted."

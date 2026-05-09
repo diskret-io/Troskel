@@ -1,0 +1,14 @@
+#!/bin/bash
+set -euo pipefail
+DATA_USB="/dev/disk/by-label/TROSKEL-DATA"
+MOUNT="$(mktemp -d)"
+DEST="/var/lib/troskel"
+echo "[*] Loading scanner from data USB..."
+mount -o ro "$DATA_USB" "$MOUNT" \
+    || { echo "[!] Data USB not found. Is it plugged in?"; exit 1; }
+mkdir -p "$DEST"
+cp "$MOUNT/scanner-rootfs.ext4" "$DEST/"
+cp "$MOUNT/vmlinux"             "$DEST/"
+cp "$MOUNT/signature-date"      "$DEST/"
+umount "$MOUNT"
+echo "[+] Scanner loaded. Signature date: $(cat $DEST/signature-date)"

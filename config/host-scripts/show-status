@@ -1,0 +1,25 @@
+#!/bin/bash
+echo ""
+echo "=== Scanner status ==="
+SIG="$(cat /var/lib/troskel/signature-date 2>/dev/null || echo 'not loaded')"
+echo "  Signature date : $SIG"
+if [ -f /var/lib/troskel/scanner-rootfs.ext4 ]; then
+    SZ="$(du -sh /var/lib/troskel/scanner-rootfs.ext4 | cut -f1)"
+    echo "  Scanner image  : loaded ($SZ)"
+else
+    echo "  Scanner image  : NOT LOADED"
+fi
+if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+    echo "  KVM            : available"
+else
+    echo "  KVM            : NOT AVAILABLE — scanning will fail"
+fi
+LAST="$(ls -t /var/log/troskel/ 2>/dev/null | head -1)"
+if [ -n "$LAST" ]; then
+    RESULT="$(grep 'VERDICT' /var/log/troskel/"$LAST" 2>/dev/null | tail -1 || echo 'unknown')"
+    echo "  Last scan      : $LAST"
+    echo "  Last result    : $RESULT"
+else
+    echo "  Last scan      : none this session"
+fi
+echo ""

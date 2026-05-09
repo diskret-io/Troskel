@@ -1,0 +1,66 @@
+#!/bin/bash
+set -euo pipefail
+
+PASS=0
+FAIL=0
+
+check() {
+    local DESC="$1"
+    local RESULT="$2"
+    if [ "$RESULT" = "ok" ]; then
+        printf "  [PASS] %s\n" "$DESC"
+        PASS=$((PASS+1))
+    else
+        printf "  [FAIL] %s — %s\n" "$DESC" "$RESULT"
+        FAIL=$((FAIL+1))
+    fi
+}
+
+echo ""
+echo "=== System readiness check ==="
+echo ""
+
+NET=$(ip link show | grep -v "lo:" | grep -c "UP" || true)
+check "No active network interfaces beyond loopback" \
+    "$([ "$NET" -eq 0 ] && echo ok || echo "${NET} interface(s) active")"
+
+check "KVM accessible" \
+    "$([ -r /dev/kvm ] && [ -w /dev/kvm ] && echo ok || echo "not accessible")"
+
+check "Scanner image loaded" \
+    "$([ -f /var/lib/troskel/scanner-rootfs.ext4 ] && echo ok || echo "not found")"
+
+check "Guest kernel loaded" \
+    "$([ -f /var/lib/troskel/vmlinux ] && echo ok || echo "not found")"
+
+ZINC=$(systemctl is-enabled zincati 2>/dev/null || echo "unknown")
+check "Auto-update (zincati) is disabled" \
+    "$([ "$ZINC" = "masked" ] && echo ok || echo "status: $ZINC")"
+
+NET_IN_SCAN=$(grep -c "network-interfaces" /usr/local/bin/scan-wrap 2>/dev/null || true)
+check "No network interface in scan config" \
+    "$([ "$NET_IN_SCAN" -eq 0 ] && echo ok || echo "network config found — review scan-wrap")"
+
+if [ -f /var/lib/troskel/signature-date ]; then
+    SIG_DATE="$(cat /var/lib/troskel/signature-date)"
+    SIG_EPOCH="$(date -d "$SIG_DATE" +%s 2>/dev/null || echo 0)"
+    NOW_EPOCH="$(date +%s)"
+    AGE_DAYS=$(( (NOW_EPOCH - SIG_EPOCH) / 86400 ))
+    check "Signature date present and fresh (age: ${AGE_DAYS} days)" \
+        "$([ "$AGE_DAYS" -le 30 ] && echo ok || echo "signatures are ${AGE_DAYS} days old — run update")"
+else
+    check "Signature date present" "not found"
+fi
+
+echo ""
+echo "=== Results: ${PASS} passed, ${FAIL} failed ==="
+echo ""
+
+if [ "$FAIL" -gt 0 ]; then
+    echo "[!] One or more checks failed. Do not scan until resolved."
+    echo "    Contact the admin if you are unsure how to proceed."
+    exit 1
+else
+    echo "[+] All checks passed. System is ready to scan."
+    exit 0
+fi

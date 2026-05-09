@@ -1,0 +1,138 @@
+#!/bin/bash
+# scan-wrap — host-side Firecracker wrapper
+# Usage: scan-wrap <directory-to-scan>
+set -euo pipefail
+
+TARGET_DIR="${1:?Usage: scan-wrap <directory-to-scan>}"
+SIGDIR="/var/lib/troskel"
+BASE_IMAGE="${SIGDIR}/scanner-rootfs.ext4"
+KERNEL="${SIGDIR}/vmlinux"
+LOG_DIR="/var/log/troskel"
+SCAN_LOG="${LOG_DIR}/scan-$(date -u +%Y%m%dT%H%M%SZ).log"
+API_SOCKET="/tmp/troskel-$$.socket"
+WORK="$(mktemp -d --tmpdir troskel-XXXXXX)"
+FC_PID=""
+
+cleanup() {
+    [ -n "$FC_PID" ] && kill "$FC_PID" 2>/dev/null || true
+    rm -rf "$WORK"
+    rm -f  "$API_SOCKET"
+}
+trap cleanup EXIT INT TERM
+
+[ -f "$BASE_IMAGE" ] || { echo "[!] Scanner image not found. Was load-scanner successful?"; exit 1; }
+[ -f "$KERNEL"     ] || { echo "[!] Kernel not found. Was load-scanner successful?"; exit 1; }
+[ -r /dev/kvm ] && [ -w /dev/kvm ] \
+    || { echo "[!] KVM not accessible. This machine may not support hardware virtualisation."; exit 1; }
+[ -d "$TARGET_DIR" ] || { echo "[!] Directory not found: $TARGET_DIR"; exit 1; }
+
+mkdir -p "$LOG_DIR"
+
+EPHEMERAL="${WORK}/rootfs.ext4"
+cp --sparse=always "$BASE_IMAGE" "$EPHEMERAL"
+
+SCAN_IMG="${WORK}/scanfiles.ext4"
+truncate -s 4G "$SCAN_IMG"
+mkfs.ext4 -F -d "$TARGET_DIR" "$SCAN_IMG" 2>/dev/null
+
+cat > "${WORK}/fc-config.json" <<EOF
+{
+  "boot-source": {
+    "kernel_image_path": "${KERNEL}",
+    "boot_args": "console=ttyS0 reboot=k panic=1 root=/dev/vda rw quiet loglevel=0"
+  },
+  "drives": [
+    {
+      "drive_id":       "rootfs",
+      "path_on_host":   "${EPHEMERAL}",
+      "is_root_device": true,
+      "is_read_only":   false
+    },
+    {
+      "drive_id":       "scanfiles",
+      "path_on_host":   "${SCAN_IMG}",
+      "is_root_device": false,
+      "is_read_only":   true
+    }
+  ],
+  "machine-config": {
+    "vcpu_count":   2,
+    "mem_size_mib": 2048,
+    "smt":          false
+  }
+}
+EOF
+
+echo "[*] Starting scan — this may take several minutes..."
+echo "[*] Log: $SCAN_LOG"
+echo ""
+
+: > "${WORK}/fc-hypervisor.log"   # Firecracker won't create it itself
+
+firecracker \
+    --api-sock    "$API_SOCKET" \
+    --config-file "${WORK}/fc-config.json" \
+    --log-path    "${WORK}/fc-hypervisor.log" \
+    --level       Warn \
+    > >(tee -a "$SCAN_LOG") 2>&1 &
+FC_PID=$!
+
+wait "$FC_PID" || true
+FC_PID=""
+
+# Per-engine summary. Extract the ENGINE: lines emitted by the
+# guest entrypoint and reformat them for the operator. The
+# values are read from a controlled grammar (status= one of
+# clean/threat/error, count= a non-negative integer); we
+# validate both before display so a malformed or hostile log
+# cannot inject formatting onto the operator's terminal.
+summarise_engine() {
+    local NAME="$1"          # display label, e.g. "ClamAV"
+    local TAG="$2"           # ENGINE tag in the log, e.g. "clamav"
+    local LINE STATUS COUNT
+    LINE="$(grep "^\[..:..:..\] ENGINE: ${TAG} " "$SCAN_LOG" | tail -1 || true)"
+    if [ -z "$LINE" ]; then
+        printf "  %-8s : no result\n" "$NAME"
+        return
+    fi
+    STATUS="$(echo "$LINE" | sed -n 's/.* status=\([a-z]*\) .*/\1/p')"
+    COUNT="$( echo "$LINE" | sed -n 's/.* count=\([0-9]*\).*/\1/p')"
+    case "$STATUS" in
+        clean)  printf "  %-8s : clean\n" "$NAME" ;;
+        threat) printf "  %-8s : THREAT (%s flagged)\n" "$NAME" "${COUNT:-?}" ;;
+        error)  printf "  %-8s : ERROR\n" "$NAME" ;;
+        *)      printf "  %-8s : unknown\n" "$NAME" ;;
+    esac
+}
+
+echo ""
+if grep -q "VERDICT: THREAT DETECTED" "$SCAN_LOG"; then
+    printf '\033[1;41m                                                \033[0m\n'
+    printf '\033[1;41m   *** THREAT DETECTED — DO NOT TRANSFER ***    \033[0m\n'
+    printf '\033[1;41m                                                \033[0m\n'
+    echo ""
+    summarise_engine "ClamAV"  "clamav"
+    summarise_engine "LOKI-RS" "loki"
+    echo ""
+    echo "Full log: $SCAN_LOG"
+    echo "For flagged item details:  grep -E 'FOUND\$|\"level\":\"ALERT\"' \"$SCAN_LOG\""
+elif grep -q "VERDICT: CLEAN" "$SCAN_LOG"; then
+    printf '\033[1;42m                                                \033[0m\n'
+    printf '\033[1;42m   *** CLEAN — Files may proceed               \033[0m\n'
+    printf '\033[1;42m                                                \033[0m\n'
+    echo ""
+    summarise_engine "ClamAV"  "clamav"
+    summarise_engine "LOKI-RS" "loki"
+    echo ""
+    echo "Full log: $SCAN_LOG"
+else
+    printf '\033[1;43m                                                \033[0m\n'
+    printf '\033[1;43m   *** RESULT UNCLEAR — Contact admin           \033[0m\n'
+    printf '\033[1;43m                                                \033[0m\n'
+    echo ""
+    summarise_engine "ClamAV"  "clamav"
+    summarise_engine "LOKI-RS" "loki"
+    echo ""
+    echo "No recognisable verdict in log. Do not transfer files."
+    echo "Full log: $SCAN_LOG"
+fi
