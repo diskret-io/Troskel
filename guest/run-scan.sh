@@ -23,6 +23,13 @@ LOKI_DIR="/opt/loki-rs"
 LOKI_OUT="/tmp/loki-scan.jsonl"
 log() { echo "[$(date -u +%H:%M:%S)] $*" > "$SERIAL"; }
 
+# Load engine config injected by build-scanner-image.sh.
+# shellcheck source=/dev/null
+[ -f /etc/troskel-engine.env ] && . /etc/troskel-engine.env
+# Fallback: match the scanner.env default so the guest is safe even if
+# the config file is absent (e.g. during a manual rootfs test).
+LOKI_MAX_FILE_SIZE="${LOKI_MAX_FILE_SIZE:-4294967296}"
+
 # count_lines — robust replacement for `grep -c PAT FILE || echo 0`. The
 # `grep -c` form prints "0" on no match AND exits non-zero, so paired
 # with `|| echo 0` it produces a two-line value ("0\n0") that fails
@@ -103,7 +110,7 @@ LOKI_EXIT=0
 rm -f "$LOKI_OUT"
 ( cd "$LOKI_DIR" && ./loki \
     --no-tui --no-html --no-log --no-procs --scan-all-files \
-    --max-file-size 4294967296 \
+    --max-file-size "${LOKI_MAX_FILE_SIZE}" \
     --threads 0 \
     --folder "$SCANDIR" \
     --jsonl "$LOKI_OUT" ) > "$SERIAL" 2>&1 || LOKI_EXIT=$?

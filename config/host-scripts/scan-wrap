@@ -11,6 +11,17 @@ LOG_DIR="/var/log/troskel"
 SCAN_LOG="${LOG_DIR}/scan-$(date -u +%Y%m%dT%H%M%SZ).log"
 API_SOCKET="/tmp/troskel-$$.socket"
 WORK="$(mktemp -d --tmpdir troskel-XXXXXX)"
+
+# Load operational tunables. On the scanning host this file is placed at
+# /var/lib/troskel/scanner.env by load-scanner from the data USB.
+SCANNER_ENV="${SIGDIR}/scanner.env"
+# shellcheck source=/dev/null
+[ -f "$SCANNER_ENV" ] && source "$SCANNER_ENV"
+# Defaults — match scanner.env defaults so scan-wrap works on a dev host
+# where scanner.env may not be present (e.g. during make scan in CI).
+GUEST_VCPU_COUNT="${GUEST_VCPU_COUNT:-2}"
+GUEST_MEM_MIB="${GUEST_MEM_MIB:-2048}"
+SCAN_IMG_SIZE="${SCAN_IMG_SIZE:-4G}"
 FC_PID=""
 
 cleanup() {
@@ -32,7 +43,7 @@ EPHEMERAL="${WORK}/rootfs.ext4"
 cp --sparse=always "$BASE_IMAGE" "$EPHEMERAL"
 
 SCAN_IMG="${WORK}/scanfiles.ext4"
-truncate -s 4G "$SCAN_IMG"
+truncate -s "${SCAN_IMG_SIZE}" "$SCAN_IMG"
 mkfs.ext4 -F -d "$TARGET_DIR" "$SCAN_IMG" 2>/dev/null
 
 cat > "${WORK}/fc-config.json" <<EOF
@@ -56,8 +67,8 @@ cat > "${WORK}/fc-config.json" <<EOF
     }
   ],
   "machine-config": {
-    "vcpu_count":   2,
-    "mem_size_mib": 2048,
+    "vcpu_count":   ${GUEST_VCPU_COUNT},
+    "mem_size_mib": ${GUEST_MEM_MIB},
     "smt":          false
   }
 }

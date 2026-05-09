@@ -6,7 +6,9 @@
 set -euo pipefail
 
 USB_DEV="${1:?Usage: prepare-data-usb.sh <device> e.g. /dev/sdb}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SIGDIR="/var/lib/troskel"
+SCANNER_ENV="${SCRIPT_DIR}/../config/scanner.env"
 
 [ "$(id -u)" -eq 0 ] || { echo "[!] Must be run as root."; exit 1; }
 
@@ -28,6 +30,8 @@ if [ "$TRAN" != "usb" ]; then
 fi
 
 # Confirm required source files exist before doing anything destructive.
+[ -f "$SCANNER_ENV" ]     || { echo "[!] Missing config/scanner.env — is the repo complete?"; exit 1; }
+
 for FILE in scanner-rootfs.ext4 scanner-rootfs.ext4.sha256 vmlinux signature-date; do
     [ -f "${SIGDIR}/${FILE}" ] \
         || { echo "[!] Missing: ${SIGDIR}/${FILE} — run scripts/run-update.sh first."; exit 1; }
@@ -60,6 +64,7 @@ cp "${SIGDIR}/scanner-rootfs.ext4"        "$MOUNT/"
 cp "${SIGDIR}/scanner-rootfs.ext4.sha256" "$MOUNT/"
 cp "${SIGDIR}/vmlinux"                    "$MOUNT/"
 cp "${SIGDIR}/signature-date"             "$MOUNT/"
+cp "$SCANNER_ENV" "${MOUNT}/scanner.env"
 date -u --iso-8601=seconds > "${MOUNT}/usb-written-date"
 sync
 

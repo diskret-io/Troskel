@@ -1,6 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+# Load operational tunables from the data USB (placed here by load-scanner).
+# shellcheck source=/dev/null
+[ -f /var/lib/troskel/scanner.env ] && source /var/lib/troskel/scanner.env
+CLAM_SIG_MAX_AGE_DAYS="${CLAM_SIG_MAX_AGE_DAYS:-30}"
+
 PASS=0
 FAIL=0
 
@@ -47,7 +52,7 @@ if [ -f /var/lib/troskel/signature-date ]; then
     NOW_EPOCH="$(date +%s)"
     AGE_DAYS=$(( (NOW_EPOCH - SIG_EPOCH) / 86400 ))
     check "Signature date present and fresh (age: ${AGE_DAYS} days)" \
-        "$([ "$AGE_DAYS" -le 30 ] && echo ok || echo "signatures are ${AGE_DAYS} days old — run update")"
+        "$([ "$AGE_DAYS" -le "$CLAM_SIG_MAX_AGE_DAYS" ] && echo ok || echo "signatures are ${AGE_DAYS} days old — run update")"
 else
     check "Signature date present" "not found"
 fi
