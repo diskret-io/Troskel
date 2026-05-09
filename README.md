@@ -1,6 +1,6 @@
 # Troskel
 
-![CI](https://github.com/yourname/troskel/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/diskret/troskel/actions/workflows/ci.yml/badge.svg)
 
 ## Air-gapped file transfer scanner
 
