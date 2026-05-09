@@ -1,5 +1,7 @@
 # Troskel
 
+![CI](https://github.com/yourname/troskel/actions/workflows/ci.yml/badge.svg)
+
 ## Air-gapped file transfer scanner
 
 Static scan of files for known malware before they cross into an air-gapped environment.
