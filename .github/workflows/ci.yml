@@ -26,34 +26,21 @@ jobs:
         run: make validate
 
   # ---------------------------------------------------------------------------
-  # Tier 2 — build pipeline
-  # debootstrap + scanner image build. Needs --privileged inside the container.
-  # Runs on push to main and on PRs. Takes ~10 minutes (debootstrap is slow).
+  # Tier 2 + 3 — build pipeline and scan test
+  # Runs in a single job so the Docker volume with build artefacts (scanner
+  # rootfs, signatures, kernel) persists from make build into make scan.
+  # Separate jobs run on separate runners and cannot share volumes.
+  #
+  # Needs --privileged for debootstrap and mkfs.ext4 (Tier 2), and KVM for
+  # Firecracker (Tier 3). Both are available on ubuntu-latest runners.
+  #
+  # Runs on push to main only — KVM availability on PR runners is not
+  # guaranteed, and the full build+scan takes ~20 minutes.
   # ---------------------------------------------------------------------------
-  build:
-    name: Tier 2 — build
+  build-and-scan:
+    name: Tier 2+3 — build and scan
     runs-on: ubuntu-latest
     needs: validate
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build container image
-        run: make image
-
-      - name: Run build pipeline
-        run: make build
-
-  # ---------------------------------------------------------------------------
-  # Tier 3 — scan test
-  # Firecracker microVM boot + EICAR scan. Needs KVM.
-  # GitHub's ubuntu-latest runners expose /dev/kvm via nested virtualisation.
-  # Runs on push to main only (not on every PR — it takes ~5 additional
-  # minutes and KVM availability on PR runners is not guaranteed).
-  # ---------------------------------------------------------------------------
-  scan:
-    name: Tier 3 — scan
-    runs-on: ubuntu-latest
-    needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
@@ -69,6 +56,9 @@ jobs:
 
       - name: Build container image
         run: make image
+
+      - name: Run build pipeline
+        run: make build
 
       - name: Run scan test
         run: make scan
