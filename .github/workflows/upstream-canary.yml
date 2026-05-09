@@ -1,0 +1,195 @@
+# .github/workflows/upstream-canary.yml
+#
+# Catches upstream breakage before users do.
+#
+# Runs in two tiers:
+#   - reachability: every day at 06:17 UTC. Fast (~20 s). Issues HEAD
+#     requests against every upstream artefact URL the build relies on.
+#     Catches the common failure modes: URL renamed, asset deleted,
+#     repository moved, registry down.
+#   - full-build:   every Monday at 07:13 UTC. Slow (~15-20 min). Runs
+#     `make build` end-to-end inside the Troskel container, exercising
+#     every download path and the debootstrap pipeline. Catches the
+#     subtler cases the reachability tier cannot see: tarball that
+#     downloads but no longer extracts, freshclam DB layout change,
+#     LOKI-RS/glibc bump, YARA Forge schema break.
+#
+# On failure either job opens (or comments on) a GitHub issue tagged
+# `canary` and `upstream`, so you get a normal issue notification rather
+# than having to babysit the Actions tab. The dedup logic searches for
+# an existing open issue with both labels before creating a new one.
+#
+# Manually-triggerable via the "Run workflow" button in the Actions tab
+# (workflow_dispatch). Useful when you suspect something is broken and
+# want signal before the next scheduled slot.
+
+name: Upstream canary
+
+on:
+  schedule:
+    # Daily reachability + weekly full build. Offset minutes (17, 13) to
+    # avoid the top-of-hour scheduler contention that delays Actions
+    # cron jobs by tens of minutes on busy days. Times are UTC.
+    - cron: '17 6 * * *'    # daily 06:17 UTC — reachability only
+    - cron: '13 7 * * 1'    # Mondays 07:13 UTC — full build (also runs reachability)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write   # for the failure-handler step
+
+# Don't pile up runs if a previous one is still going. The full build
+# takes ~20 min; if for some reason it overlaps with the next daily run
+# we want the daily one to wait, not stack.
+concurrency:
+  group: upstream-canary
+  cancel-in-progress: false
+
+jobs:
+  # ── Tier 0: reachability ─────────────────────────────────────────────
+  reachability:
+    name: Reachability check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: HEAD-check every upstream URL
+        id: check
+        run: bash tests/canary/check-upstream.sh
+
+      - name: Open or update issue on failure
+        if: failure()
+        uses: actions/github-script@v7
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TIER: reachability
+        with:
+          script: |
+            const { RUN_URL, TIER } = process.env;
+            const title = `Upstream canary: ${TIER} failure`;
+            const body = [
+              `The **${TIER}** tier of the upstream canary failed.`,
+              ``,
+              `Run: ${RUN_URL}`,
+              ``,
+              `Likely causes:`,
+              `- An upstream artefact URL has moved, been renamed, or 404s.`,
+              `- A floating version (Butane, CoreOS installer image) no longer resolves.`,
+              `- The Firecracker CI kernel listing for the current FC_VERSION is empty (kernel series rotated upstream).`,
+              ``,
+              `First place to look: \`config/versions.env\` and the failing download script.`,
+              `Re-run the workflow manually from the Actions tab once the cause is identified.`,
+            ].join('\n');
+
+            const { owner, repo } = context.repo;
+            const existing = await github.rest.issues.listForRepo({
+              owner, repo,
+              state: 'open',
+              labels: 'canary,upstream',
+              per_page: 50,
+            });
+            const match = existing.data.find(i => i.title === title);
+
+            if (match) {
+              await github.rest.issues.createComment({
+                owner, repo,
+                issue_number: match.number,
+                body: `Failed again — ${RUN_URL}`,
+              });
+              core.notice(`Commented on existing issue #${match.number}.`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner, repo, title, body,
+                labels: ['canary', 'upstream'],
+              });
+              core.notice(`Opened issue #${created.data.number}.`);
+            }
+
+  # ── Tier 2: full build ──────────────────────────────────────────────
+  # Only runs on the weekly schedule and on manual dispatch. The cron
+  # filter below is the canonical way to make a job tier-specific in a
+  # multi-schedule workflow.
+  full-build:
+    name: Full build (weekly)
+    runs-on: ubuntu-latest
+    needs: reachability   # don't bother with a 20-min build if HEADs are 404
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'schedule' && github.event.schedule == '13 7 * * 1')
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      # Reclaim disk space on the runner. ubuntu-latest gives ~14 GB free
+      # by default; debootstrap + scanner image + container layers fit,
+      # but tightly. Stripping the preinstalled toolchains we don't use
+      # buys ~25 GB and prevents flaky "no space left" failures down the
+      # line.
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false   # slow; not worth it
+          swap-storage: false
+
+      # `make build` requires a privileged container (debootstrap,
+      # mkfs.ext4, mounts). The Makefile already wraps this; we just
+      # invoke it. The Makefile's `image` target builds the troskel-build
+      # container from the in-repo Dockerfile, so no separate setup is
+      # needed.
+      - name: Run full build inside container
+        run: make build
+
+      - name: Open or update issue on failure
+        if: failure()
+        uses: actions/github-script@v7
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TIER: full-build
+        with:
+          script: |
+            const { RUN_URL, TIER } = process.env;
+            const title = `Upstream canary: ${TIER} failure`;
+            const body = [
+              `The **${TIER}** tier of the upstream canary failed.`,
+              ``,
+              `Run: ${RUN_URL}`,
+              ``,
+              `The reachability tier passed but the full build did not. Likely causes:`,
+              `- An upstream tarball downloads but no longer extracts cleanly.`,
+              `- ClamAV freshclam DB layout changed or signing key rotated.`,
+              `- LOKI-RS \`loki-util update\` is failing or YARA Forge schema changed.`,
+              `- A glibc / Debian \`${process.env.GITHUB_REF_NAME || 'trixie'}\` bump broke a pinned binary.`,
+              `- Firecracker CI kernel for the current series rotated to an incompatible patch.`,
+              ``,
+              `Open the run log and look at the failing \`make build\` step.`,
+              `Re-run manually from the Actions tab once the cause is identified.`,
+            ].join('\n');
+
+            const { owner, repo } = context.repo;
+            const existing = await github.rest.issues.listForRepo({
+              owner, repo,
+              state: 'open',
+              labels: 'canary,upstream',
+              per_page: 50,
+            });
+            const match = existing.data.find(i => i.title === title);
+
+            if (match) {
+              await github.rest.issues.createComment({
+                owner, repo,
+                issue_number: match.number,
+                body: `Failed again — ${RUN_URL}`,
+              });
+              core.notice(`Commented on existing issue #${match.number}.`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner, repo, title, body,
+                labels: ['canary', 'upstream'],
+              });
+              core.notice(`Opened issue #${created.data.number}.`);
+            }
