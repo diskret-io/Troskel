@@ -17,6 +17,15 @@
 # This script is deliberately conservative: it should fail when an upstream
 # moves, renames, or 404s, even if the change is benign. A canary that
 # self-heals against upstream changes has stopped being a canary.
+#
+# Note on per-endpoint accept-lists: a few upstreams return non-2xx codes
+# *as their healthy response* and require an explicit accept-list:
+#   - quay.io/v2/ returns 401 Unauthorized per the OCI Distribution Spec;
+#     it means "registry is up, auth here for data". 401 is healthy.
+#   - ClamAV's freshclam mirror returns 403 to HEAD requests as an abuse
+#     mitigation. We cannot HEAD daily.cvd directly; the canonical
+#     freshness oracle is the TXT record at current.cvd.clamav.net,
+#     which freshclam itself uses. We DNS-resolve that instead of HTTP.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -31,18 +40,27 @@ FAILED_URLS=()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-# check URL DESCRIPTION
+# check URL DESCRIPTION [ACCEPT_REGEX]
 #   Issues a HEAD request following redirects. Treats any 2xx or 3xx as
-#   success. GitHub release URLs frequently redirect to S3-backed asset
-#   URLs, so -L is required.
+#   success by default; ACCEPT_REGEX (a POSIX ERE) extends that, e.g.
+#   "^(2..|3..|401)$" to also accept 401.
+#
+#   Note: we do NOT pass -f to curl. With -f, curl exits non-zero on a
+#   4xx/5xx and never writes %{http_code}, leaving the variable empty.
+#   Without -f, curl returns the HTTP code regardless and we make the
+#   pass/fail decision ourselves. This is the only correct shape for a
+#   reachability check that needs to distinguish "registry is up but
+#   demands auth" from "registry is down".
 check() {
     local URL="$1"
     local DESC="$2"
+    local ACCEPT_REGEX="${3:-^[23][0-9][0-9]$}"
     local CODE
 
-    CODE="$(curl -fsSLI -o /dev/null -w '%{http_code}' --max-time 20 "$URL" 2>/dev/null || echo "000")"
+    CODE="$(curl -sSLI -o /dev/null -w '%{http_code}' --max-time 20 "$URL" 2>/dev/null)"
+    CODE="${CODE:-000}"
 
-    if [[ "$CODE" =~ ^2[0-9][0-9]$ ]] || [[ "$CODE" =~ ^3[0-9][0-9]$ ]]; then
+    if [[ "$CODE" =~ $ACCEPT_REGEX ]]; then
         printf "  [PASS] %-40s %s\n" "$DESC" "($CODE)"
         PASS=$((PASS + 1))
     else
@@ -59,7 +77,7 @@ check() {
 check_butane_resolves() {
     local URL="https://github.com/coreos/butane/releases/latest"
     local RESOLVED
-    RESOLVED="$(curl -fsSLI -o /dev/null -w '%{url_effective}' --max-time 20 "$URL" 2>/dev/null || echo "")"
+    RESOLVED="$(curl -sSLI -o /dev/null -w '%{url_effective}' --max-time 20 "$URL" 2>/dev/null || echo "")"
 
     if [[ "$RESOLVED" =~ /releases/tag/v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
         printf "  [PASS] %-40s %s\n" "Butane latest resolves" "(${RESOLVED##*/})"
@@ -93,6 +111,29 @@ check_kernel_listing() {
         printf "  [FAIL] %-40s %s\n" "Firecracker CI kernel listing" "(no kernel under ${CI_VERSION})" >&2
         FAIL=$((FAIL + 1))
         FAILED_URLS+=("Firecracker CI kernel: no vmlinux-* key found under firecracker-ci/${CI_VERSION}/${ARCH}/")
+    fi
+}
+
+# check_clamav_freshness_oracle
+#   freshclam queries a DNS TXT record at current.cvd.clamav.net to learn
+#   the latest signature versions before deciding whether to download.
+#   This is the canonical freshness oracle for the entire ClamAV update
+#   path; if it answers, freshclam can update. We use this instead of an
+#   HTTP HEAD on daily.cvd because the CDN rejects HEAD with 403 as part
+#   of its abuse mitigation.
+check_clamav_freshness_oracle() {
+    local TXT
+    TXT="$(dig +short TXT current.cvd.clamav.net 2>/dev/null | head -1)"
+
+    # Expected format is a colon-separated string starting with a version
+    # field, e.g. "0.103.13:62:27577:1731499200:1:90:54:333".
+    if [[ "$TXT" =~ ^\"?[0-9]+\.[0-9]+\.[0-9]+: ]]; then
+        printf "  [PASS] %-40s %s\n" "ClamAV freshness oracle" "(TXT ok)"
+        PASS=$((PASS + 1))
+    else
+        printf "  [FAIL] %-40s %s\n" "ClamAV freshness oracle" "(unexpected TXT: '$TXT')" >&2
+        FAIL=$((FAIL + 1))
+        FAILED_URLS+=("ClamAV freshness oracle current.cvd.clamav.net returned unexpected TXT: '${TXT}'")
     fi
 }
 
@@ -135,6 +176,7 @@ check "https://github.com/Neo23x0/Loki-RS/releases/download/${LOKI_VERSION}/loki
 check_butane_resolves
 check_kernel_listing
 check_coreos_stream
+check_clamav_freshness_oracle
 
 # ── Static / well-known endpoints ─────────────────────────────────────────────
 
@@ -146,16 +188,14 @@ check "https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt" \
 check "https://deb.debian.org/debian/dists/${DEBIAN_RELEASE}/Release" \
       "Debian ${DEBIAN_RELEASE} mirror"
 
-# ClamAV freshclam mirror — daily.cvd is the hot-path signature file and is
-# served via HTTP redirect to a CDN. A HEAD here confirms the mirror is alive.
-check "https://database.clamav.net/daily.cvd" \
-      "ClamAV freshclam mirror"
-
 # CoreOS installer container image registry — pulled by prepare-boot-usb.sh.
-# quay.io serves a 401 (unauthenticated) on the manifest endpoint without
-# auth, but a 200 on the v2 root indicates the registry is up.
+# The OCI Distribution Spec mandates that /v2/ on a working registry returns
+# 401 Unauthorized when accessed without credentials. 401 here means
+# "registry is up, auth here for data" — it is the healthy response.
+# A 5xx or connection failure would mean the registry is genuinely down.
 check "https://quay.io/v2/" \
-      "Quay.io registry (coreos-installer)"
+      "Quay.io registry (coreos-installer)" \
+      "^(2[0-9][0-9]|3[0-9][0-9]|401)$"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 
