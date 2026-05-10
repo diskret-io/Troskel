@@ -84,6 +84,31 @@ sha256sum tests/files/EICAR.txt   # after — must match
 
 **Expect:** identical hashes.
 
+
+## Freshness gate — stale signatures
+
+`check-system-ready` enforces age limits on both ClamAV signatures and LOKI-RS YARA rules, but this check runs on the physical scanning host and is not covered by CI. Test it manually after any change to `check-system-ready` or `scanner.env`.
+
+```bash
+# On the scanning host, backdate both freshness files to simulate a stale update.
+# Adjust the date to something clearly older than CLAM_SIG_MAX_AGE_DAYS (30)
+# and LOKI_YARA_MAX_AGE_DAYS (60) from scanner.env.
+sudo bash -c "echo '2025-01-01T00:00:00+00:00' > /var/lib/troskel/signature-date"
+sudo bash -c "echo '2025-01-01T00:00:00+00:00' > /var/lib/troskel/yara-rules-date"
+check-system-ready
+```
+
+**Expect:** two FAIL lines — one for ClamAV signature age, one for YARA rule age — and a non-zero exit code.
+
+Restore by reloading from a fresh data USB (`load-scanner`) or by writing the current date back manually:
+
+```bash
+sudo bash -c "date -u --iso-8601=seconds > /var/lib/troskel/signature-date"
+sudo bash -c "date -u --iso-8601=seconds > /var/lib/troskel/yara-rules-date"
+```
+
+Also worth testing each threshold independently (stale ClamAV only, fresh YARA; and vice versa) to confirm the checks are genuinely independent and not short-circuiting.
+
 ---
 
 When any of these fails, capture the scan log and the hypervisor log (`/tmp/scan-wrap-*/fc-hypervisor.log`, before the cleanup trap fires — easiest is to add `set -x` to your `/tmp/scan-wrap` copy and rerun) and record the finding in `docs/MAINTENANCE.md`.
