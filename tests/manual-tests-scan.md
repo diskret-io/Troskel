@@ -16,7 +16,7 @@ All checks below are run as root.
 Kill Firecracker before the guest emits anything. The log should be empty or truncated, and the wrapper should print the yellow block.
 
 ```bash
-sudo /tmp/scan-wrap tests/files/ &
+sudo bash /tmp/scan-wrap tests/files/ &
 sleep 2 && sudo pkill -9 firecracker
 ```
 
@@ -57,7 +57,7 @@ Corrupt the YARA rule directory inside the rootfs (or remove it) to force LOKI-R
 Start a scan, Ctrl-C it, then check that the workdir, loop device, and API socket are gone:
 
 ```bash
-sudo /tmp/scan-wrap tests/files/
+sudo bash /tmp/scan-wrap tests/files/
 # Ctrl-C during the scan
 ls /tmp/scan-wrap-* 2>/dev/null            # should be empty
 sudo losetup -a | grep scanfiles         # should be empty
@@ -78,7 +78,7 @@ After a scan, confirm the file USB image was not modified. The host loop device 
 
 ```bash
 sha256sum tests/files/EICAR.txt   # before
-sudo /tmp/scan-wrap tests/files/
+sudo bash /tmp/scan-wrap tests/files/
 sha256sum tests/files/EICAR.txt   # after — must match
 ```
 

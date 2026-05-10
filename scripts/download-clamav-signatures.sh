@@ -21,9 +21,22 @@ chown -R root:root "$DB_OUT"
 # freshclam writes directly into its configured DatabaseDirectory.
 # We point it at our staging dir so signatures land where
 # build-scanner-image.sh expects them.
+# Write a minimal freshclam config so the tool works on hosts where
+# /etc/clamav/freshclam.conf is absent (e.g. NixOS, or Docker containers
+# that installed clamav-freshclam without running the postinst script).
+FRESHCLAM_CONF="$(mktemp --suffix=.conf)"
+cat > "$FRESHCLAM_CONF" <<CONF
+DatabaseDirectory ${DB_OUT}
+DatabaseMirror database.clamav.net
+UpdateLogFile /dev/null
+LogSyslog false
+LogRotate false
+MaxAttempts 3
+CONF
+
 echo "[*] Downloading ClamAV signatures via freshclam..."
-freshclam --user root --datadir="$DB_OUT" \
-    || { echo "[!] freshclam failed — check internet connectivity or DNS."; exit 1; }
+freshclam --user root --config-file="$FRESHCLAM_CONF"     || { rm -f "$FRESHCLAM_CONF"; echo "[!] freshclam failed — check internet connectivity or DNS."; exit 1; }
+rm -f "$FRESHCLAM_CONF"
 
 SIG_DATE="$(date -u --iso-8601=seconds)"
 echo "$SIG_DATE" > "${SIGDIR}/signature-date"

@@ -44,6 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         openssl \
         parted \
         shellcheck \
+        unzip \
         util-linux \
         wget \
         xorriso \

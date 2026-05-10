@@ -14,6 +14,9 @@
 # Never commit the compiled form; always regenerate from source.
 ignition.json
 
+# Don't commit pass word-list
+config/eff-large-wordlist.txt
+
 # Editor and OS noise
 .DS_Store
 Thumbs.db

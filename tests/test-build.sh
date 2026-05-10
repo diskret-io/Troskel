@@ -42,15 +42,23 @@ step() { echo ""; echo "=== $* ==="; }
 
 cd "$PROJECT_ROOT"
 
-# Refuse to run if prepare-build-machine.sh has not been run. Without
-# debootstrap, butane, firecracker etc. on PATH, the test would fail
-# halfway through with confusing errors. Better to fail loudly up front.
+# Check for required tools individually so the operator knows exactly
+# what is missing rather than getting a single opaque failure.
+# Run scripts/prepare-build-machine.sh to install anything missing.
+PREFLIGHT_FAIL=0
 for tool in debootstrap butane firecracker; do
     command -v "$tool" >/dev/null 2>&1 \
-        || { echo "[!] '$tool' not found on PATH. Run scripts/prepare-build-machine.sh first."; exit 1; }
+        || { echo "[!] '$tool' not found on PATH."; PREFLIGHT_FAIL=1; }
 done
 [ -x /opt/loki-rs/loki ] \
-    || { echo "[!] /opt/loki-rs/loki not found. Run scripts/prepare-build-machine.sh first."; exit 1; }
+    || { echo "[!] loki-rs not found at /opt/loki-rs/loki."; PREFLIGHT_FAIL=1; }
+if [ "$PREFLIGHT_FAIL" -ne 0 ]; then
+    echo ""
+    echo "    Run: sudo bash scripts/prepare-build-machine.sh"
+    echo "    On NixOS: ensure tools are available via nix-env or configuration.nix,"
+    echo "    then install Firecracker, Butane, and LOKI-RS by running the script."
+    exit 1
+fi
 
 if [ "$CLEAN" -eq 1 ]; then
     step "0/5  Clearing prior artefacts under ${SIGDIR}"

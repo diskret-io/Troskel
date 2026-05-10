@@ -45,8 +45,17 @@ debootstrap --arch=amd64 --variant=minbase --include=ca-certificates \
     "$DEBIAN_RELEASE" "$WORK" https://deb.debian.org/debian
 
 echo "[*] Installing ClamAV..."
-chroot "$WORK" /bin/bash -c '
+# Bind-mount /proc, /sys, and /dev before chroot so apt-get works correctly.
+# Without /proc, apt-get fails silently on some hosts (notably NixOS).
+mount --bind /proc    "${WORK}/proc"
+mount --bind /sys     "${WORK}/sys"
+mount --bind /dev     "${WORK}/dev"
+mount -t devpts devpts "${WORK}/dev/pts"
+
+chroot "$WORK" /bin/sh -c '
+    export PATH=/usr/bin:/usr/sbin:/bin:/sbin
     export DEBIAN_FRONTEND=noninteractive
+    export LC_ALL=C
     apt-get install -y --no-install-recommends clamav busybox-static
     apt-get clean
     rm -rf /var/lib/apt/lists/*
@@ -70,7 +79,7 @@ echo "[*] Installing LOKI-RS..."
 mkdir -p "${WORK}/opt/loki-rs"
 cp -r "${LOKI_HOST_DIR}/." "${WORK}/opt/loki-rs/"
 # Replace the tarball-bundled (and already stale) signatures with the
-# refreshed copy. download-loki-yara-rules.sh just ran loki-util update on the
+# refreshed copy. download-loki-yara-rules.sh just fetched the latest YARA Forge Core rules; this is the same data,
 # build station; this is the same data, materialised into the rootfs.
 rm -rf "${WORK}/opt/loki-rs/signatures"
 mkdir -p "${WORK}/opt/loki-rs/signatures"
@@ -94,6 +103,15 @@ LOKI_MAX_FILE_SIZE=${LOKI_MAX_FILE_SIZE}
 ENGCONF
 
 ln -sf /bin/busybox "${WORK}/sbin/init" 2>/dev/null || true
+
+echo "[*] Unmounting bind mounts before image creation..."
+# Must unmount /proc, /sys, and /dev before running mkfs.ext4 -d.
+# If still mounted, mkfs.ext4 tries to copy live /proc entries into the
+# image, causing "symlink increased in size" errors and build failure.
+umount -lf "${WORK}/proc"    2>/dev/null || true
+umount -lf "${WORK}/sys"     2>/dev/null || true
+umount -lf "${WORK}/dev/pts" 2>/dev/null || true
+umount -lf "${WORK}/dev"     2>/dev/null || true
 
 echo "[*] Creating scanner image..."
 truncate -s "$SIZE" "$OUTPUT"

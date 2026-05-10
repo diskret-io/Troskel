@@ -112,6 +112,7 @@ rm -f "$LOKI_OUT"
     --no-tui --no-html --no-log --no-procs --scan-all-files \
     --max-file-size "${LOKI_MAX_FILE_SIZE}" \
     --threads 0 \
+    --alert-level 60 \
     --folder "$SCANDIR" \
     --jsonl "$LOKI_OUT" ) > "$SERIAL" 2>&1 || LOKI_EXIT=$?
 log "LOKI-RS exit: $LOKI_EXIT"
@@ -128,9 +129,13 @@ if [ -f "$LOKI_OUT" ]; then
     LOKI_COUNT=$(count_lines '"level":"ALERT"' "$LOKI_OUT")
     LOKI_COUNT="${LOKI_COUNT:-0}"
 fi
+# Exit codes: 0=clean, 1=error, 2=warnings found (below alert threshold).
+# With --alert-level 60, score>=60 becomes ALERT and exit code 1.
+# Exit code 2 means findings exist but all scored below alert-level —
+# treat as clean since no ALERTs were emitted.
 if [ "$LOKI_COUNT" -gt 0 ]; then
     LOKI_STATUS="threat"
-elif [ "$LOKI_EXIT" -eq 0 ]; then
+elif [ "$LOKI_EXIT" -eq 0 ] || [ "$LOKI_EXIT" -eq 2 ]; then
     LOKI_STATUS="clean"
 else
     LOKI_STATUS="error"
