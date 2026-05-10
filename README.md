@@ -1,96 +1,170 @@
-# Testing
+# Troskel
 
-Tests run inside a container using the `troskel-build` image, which provides all required tooling (Firecracker, Butane, LOKI-RS, debootstrap, etc.) regardless of what the host OS is. The container works with Podman or Docker interchangeably; Podman is preferred and is the default on Fedora and openSUSE.
+![CI](https://github.com/diskret/troskel/actions/workflows/ci.yml/badge.svg)
 
-The `Makefile` at the project root wraps all container invocations so you do not need to remember flags.
+## Air-gapped file transfer scanner
 
-## Prerequisites
+Static scan of files for known malware before they cross into an air-gapped environment.
 
-Docker is required. Install it for your distribution:
+Troskel uses multiple engines — currently [ClamAV](https://www.clamav.net/) and [LOKI-RS](https://github.com/Neo23x0/Loki-RS) — with independent detection logic. Both engines run inside an isolated [Firecracker](https://firecracker-microvm.github.io) microVM on a live OS built on [CoreOS](https://fedoraproject.org/coreos). The guest runs in RAM only and leaves no persistent state between sessions.
 
-| Distribution    | Command                                                       |
-|-----------------|---------------------------------------------------------------|
-| Fedora          | see https://docs.docker.com/engine/install/fedora/            |
-| openSUSE        | see https://docs.docker.com/engine/install/                   |
-| Debian / Ubuntu | `sudo apt-get install docker.io`                              |
-| NixOS           | `virtualisation.docker.enable = true;` in `configuration.nix` |
+## How it works
 
-Verify with: `docker run --rm hello-world`
+Two machines, two USBs, three steps.
 
-## Test tiers
-
-Tests are split into three tiers by their resource requirements.
-
-| Tier | Make target     | Privileges     | KVM | Time    | What it covers                                 |
-|------|-----------------|----------------|-----|---------|------------------------------------------------|
-| 1    | `make validate` | none           | no  | < 1 min | Butane config, shellcheck, POSIX sh compliance |
-| 2    | `make build`    | `--privileged` | no  | ~15 min | Signature download, debootstrap, image build   |
-| 3    | `make scan`     | `--privileged` | yes | ~5 min  | Firecracker boot, EICAR red path, green path   |
-
-Run all three in sequence with `make all`.
-
-## Tier 1 — validate
-
-```bash
-make image      # first time only; rebuilds if Dockerfile or versions.env changed
-make validate
+```
+Build station (networked)                 Scanning host (air-gapped)
+  │                                       │
+  ├─ download signatures + rules          ├─ boot CoreOS into RAM from TROSKEL-BOOT
+  ├─ build scanner image                  ├─ load scanner from TROSKEL-DATA into RAM
+  └─ write TROSKEL-BOOT + TROSKEL-DATA ──►└─ troskel → GREEN / RED / YELLOW
+                                               power off → RAM cleared
 ```
 
-No internet access or special privileges required. Covers:
-- `config/scanner-host.bu` compiles with Butane without error
-- All shell scripts in the project pass `shellcheck --severity=warning`
-- `guest/run-scan.sh` contains no bashisms (requires `checkbashisms` inside the image; falls back to a heuristic if absent)
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design rationale.
 
-## Tier 2 — build
+## Roles
 
-```bash
-make build
-```
+- **Admin** — prepares the two USBs on the build station before each scan session.
+- **Operator** — transfers files to the scanning host and runs the scan.
 
-Needs `--privileged` for `debootstrap` and `mkfs.ext4` inside the container. Needs internet access to download ClamAV signatures, YARA Forge Core rules, and the guest kernel. Covers:
-- `scripts/download-clamav-signatures.sh`
-- `scripts/download-loki-yara-rules.sh`
-- `scripts/download-kernel.sh`
-- `scripts/build-scanner-image.sh` (full debootstrap, ClamAV + LOKI-RS install, image creation and verification)
+---
 
-On some distributions `--privileged` requires `sudo`:
+## Admin workflow
+
+On the build station, insert both USB sticks and run:
 
 ```bash
-sudo make build
+sudo bash scripts/troskel-build.sh
 ```
 
-## Tier 3 — scan
+`troskel-build.sh` guides you through the full process interactively:
+- Detects connected USB devices and asks you to assign roles
+- Downloads fresh ClamAV signatures and YARA rules
+- Builds the scanner image
+- Writes both USB sticks and verifies checksums
+- Displays the scanning host passphrase prominently at the end
 
-KVM must be available on the host (`ls -la /dev/kvm`). If `/dev/kvm` does not exist, enable VT-x (Intel) or AMD-V (AMD) in BIOS and reboot.
+### Flags
+
+| Flag         | Effect                                                                                                                                                                   |
+|--------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--usb-data` | Write TROSKEL-DATA only (one USB needed)                                                                                                                                 |
+| `--usb-boot` | Write TROSKEL-BOOT only (one USB needed)                                                                                                                                 |
+| `--update`   | Refresh artefacts only, skip USB writing                                                                                                                                 |
+| `--debug`    | Show full output from all sub-steps                                                                                                                                      |
+| `--host`     | Advanced: bypass Docker and run directly on the host. Requires all build tools installed manually via `prepare-build-machine.sh`. Not the expected path for most admins. |
+
+### First-time setup
+
+On a fresh build station, install Docker first:
+```bash
+# See https://docs.docker.com/engine/install/ for your distribution
+sudo bash scripts/prepare-build-machine.sh
+```
+
+`troskel-build.sh` uses Docker automatically. All build tooling runs inside a container — the host needs only Docker installed.
+
+---
+
+## Operator workflow
+
+1. **Prepare the file USB** on any networked machine — copy the files you want to transfer onto a standard USB drive (FAT32, ext4, or exFAT).
+2. **Insert the TROSKEL-BOOT and TROSKEL-DATA USBs** into the scanning host and power on. Leave the file USB out for now.
+3. **Log in** as the `scanner` user with the passphrase from the admin.
+4. **Check the system is ready:**
+   ```
+   show-status
+   check-system-ready
+   ```
+5. **Insert the file USB**, then run the scan:
+   ```
+   troskel
+   ```
+   The verdict will be **GREEN**, **RED**, or **YELLOW** with a per-engine breakdown. Do not remove any USB during the scan.
+
+   If the verdict is not GREEN, or `check-system-ready` reports a problem, see [`docs/OPERATOR-GUIDE.md`](docs/OPERATOR-GUIDE.md).
+
+6. **Power off** when finished:
+   ```
+   sudo poweroff
+   ```
+
+---
+
+## Developer workflow
+
+The `make` targets run everything inside Docker — the same container image used by the admin workflow. Docker is the only host dependency.
 
 ```bash
-make scan
+make image      # build the troskel-build container image (~5 min first time)
+make validate   # Tier 1: Butane config + shellcheck (~30 sec, no privileges)
+make build      # Tier 2: full image build — debootstrap, signatures (~15 min)
+make scan       # Tier 3: Firecracker scan test — needs /dev/kvm (~5 min)
+make all        # run all three tiers in sequence
 ```
 
-Boots a real Firecracker microVM, runs both ClamAV and LOKI-RS against the EICAR test file and a clean directory, and asserts the correct verdict and per-engine status lines in both cases. The EICAR file lives at `tests/files/EICAR.txt`.
+Individual scripts under `scripts/` can also be run directly on a Debian host if you have the tools installed — useful when debugging a specific step. See [`tests/README.md`](tests/README.md) for more detail.
 
-## Interactive debugging
+---
 
-Drop into the container with a shell to investigate failures:
+## Project structure
 
-```bash
-docker run --rm -it --privileged --device /dev/kvm \
-    --volume "$(pwd):/troskel" --workdir /troskel \
-    troskel-build bash
+```
+config/
+  scanner-host.bu        Butane config for the scanning host (CoreOS Ignition)
+  host-scripts/          Scripts deployed to the scanning host via Ignition
+    troskel              Operator entry point
+    scan-wrap            Firecracker wrapper (internal)
+    load-scanner         Loads scanner image from data USB at boot
+    show-status          Displays current scanner status
+    check-system-ready   Pre-scan readiness checks
+  versions.env           Pinned upstream component versions
+  scanner.env            Operational tunables (freshness thresholds, VM sizing)
+
+guest/
+  run-scan.sh            In-VM scan entrypoint (runs inside Firecracker guest)
+  inittab                Busybox init configuration
+
+scripts/                 Build station scripts
+  troskel-build.sh       Guided admin workflow entry point
+  prepare-build-machine.sh  One-time build station setup
+  run-update.sh          Update signatures and rebuild scanner image
+  prepare-data-usb.sh    Write TROSKEL-DATA USB
+  prepare-boot-usb.sh    Write TROSKEL-BOOT USB
+  build-scanner-image.sh Build Debian guest rootfs with ClamAV + LOKI-RS
+  download-*.sh          Individual download scripts
+
+tests/
+  test-validate.sh       Tier 1: static validation (no privileges)
+  test-build.sh          Tier 2: build pipeline
+  test-scan.sh           Tier 3: Firecracker scan
+  manual-tests-scan.md   Manual test procedures (yellow path, cleanup, etc.)
+
+docs/
+  ARCHITECTURE.md        Design rationale with diagrams
+  SECURITY.md            Security model and residual risks
+  OPERATOR-GUIDE.md      Full operator reference
+  roadmap/               Planned work
 ```
 
-From inside, run individual test scripts directly:
+---
 
-```bash
-bash tests/test-validate.sh
-bash tests/test-build.sh --clean
-bash tests/test-scan.sh
-```
+## Roadmap
 
-## Manual tests
+| Item                                                    | Status     |
+|---------------------------------------------------------|------------|
+| SHA-256 verification of downloaded artefacts            | 🔜 next    |
+| ClamAV heuristic and PUA detection tightening           | 🔜 next    |
+| capa as a third engine (capability-based detection)     | 📋 planned |
+| Per-engine Firecracker VMs + parallel execution         | 📋 planned |
 
-Yellow-path, cleanup trap, read-only enforcement, and resource exhaustion tests are not automated. See `tests/manual-tests-scan.md` for procedure. Run these by hand after any change to `config/host-scripts/scan-wrap`, `guest/run-scan.sh`, or the Firecracker JSON template.
+---
 
-## CI
+## Security model
 
-All three tiers run automatically on GitHub Actions. Tier 1 and 2 run on every push and pull request. Tier 3 runs on pushes to `main` only (KVM availability on PR runners is not guaranteed). See `.github/workflows/ci.yml`.
+The security guarantee is: files that reach the air-gapped environment have been scanned by two independent engines running in a hardware-virtualised microVM with no network access, against signatures updated before each session.
+
+**Green** means no engine matched any known signature. It does not mean guaranteed clean — novel malware with no signature will not be detected. This is the inherent limitation of signature-based scanning.
+
+See [`docs/SECURITY.md`](docs/SECURITY.md) for the full threat model, residual risks, and design rationale.
