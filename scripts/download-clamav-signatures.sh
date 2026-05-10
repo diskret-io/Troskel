@@ -12,23 +12,29 @@ SIGDIR="/var/lib/troskel"
 DB_OUT="${SIGDIR}/clamav-db"
 
 mkdir -p "$DB_OUT"
-# Ensure the directory is owned by root. freshclam runs as the clamav
-# user (UID 100) by default and will refuse to write if the directory
-# is not owned by root or clamav. Passing --user root prevents the
-# privilege drop, but ownership must match.
-chown root:root "$DB_OUT"
+
+# freshclam requires the database directory to be owned by the clamav user
+# (UID 100 on Debian/Ubuntu) or root. We chown to clamav if it exists,
+# fall back to root otherwise (e.g. on NixOS or minimal Docker images).
+# freshclam.dat lock file must also be writable by the running user.
+if getent passwd clamav >/dev/null 2>&1; then
+    chown clamav:clamav "$DB_OUT"
+else
+    chown root:root "$DB_OUT"
+fi
 chmod 755 "$DB_OUT"
-# Remove any stale freshclam.dat that may be owned by another user.
 rm -f "${DB_OUT}/freshclam.dat"
 
-# freshclam writes directly into its configured DatabaseDirectory.
-# We point it at our staging dir so signatures land where
-# build-scanner-image.sh expects them.
 # Write a minimal freshclam config so the tool works on hosts where
-# /etc/clamav/freshclam.conf is absent (e.g. NixOS, or Docker containers
-# that installed clamav-freshclam without running the postinst script).
+# /etc/clamav/freshclam.conf is absent (e.g. NixOS, Docker without postinst).
 FRESHCLAM_CONF="$(mktemp --suffix=.conf)"
 FRESHCLAM_LOG="$(mktemp)"
+
+# Set log file ownership to match the DB directory owner.
+if getent passwd clamav >/dev/null 2>&1; then
+    chown clamav:clamav "$FRESHCLAM_LOG"
+fi
+
 cat > "$FRESHCLAM_CONF" <<CONF
 DatabaseDirectory ${DB_OUT}
 DatabaseMirror database.clamav.net
@@ -39,8 +45,14 @@ MaxAttempts 3
 CONF
 
 echo "[*] Downloading ClamAV signatures via freshclam..."
-freshclam --user root --config-file="$FRESHCLAM_CONF"     || { rm -f "$FRESHCLAM_CONF" "$FRESHCLAM_LOG"; echo "[!] freshclam failed — check internet connectivity or DNS."; exit 1; }
+freshclam --config-file="$FRESHCLAM_CONF" \
+    || { rm -f "$FRESHCLAM_CONF" "$FRESHCLAM_LOG"; \
+         echo "[!] freshclam failed — check internet connectivity or DNS."; exit 1; }
 rm -f "$FRESHCLAM_CONF" "$FRESHCLAM_LOG"
+
+# Restore ownership to root so the rest of the build pipeline can read
+# the files without privilege concerns.
+chown -R root:root "$DB_OUT"
 
 SIG_DATE="$(date -u --iso-8601=seconds)"
 echo "$SIG_DATE" > "${SIGDIR}/signature-date"
