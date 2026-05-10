@@ -165,7 +165,7 @@ Each engine's log is preserved separately under `/var/log/troskel/` with a times
 
 ## What stays the same
 
-The operator-facing workflow is unchanged: `scan-files` is invoked, a green/red/yellow verdict is displayed with a per-engine breakdown. The operator does not need to know about VM topology or the conditional capa execution path.
+The operator-facing workflow is unchanged: `troskel` is invoked, a green/red/yellow verdict is displayed with a per-engine breakdown. The operator does not need to know about VM topology or the conditional capa execution path.
 
 The security model's primary guarantee — hardware-virtualisation boundary between untrusted input and the scanning host — is unchanged and in fact strengthened by the per-engine isolation.
 
