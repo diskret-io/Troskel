@@ -1,6 +1,7 @@
 # Troskel
 
-![CI](https://github.com/diskret/troskel/actions/workflows/ci.yml/badge.svg)
+[![CI](https://github.com/diskret-io/Troskel/actions/workflows/ci.yml/badge.svg)](https://github.com/diskret-io/Troskel/actions/workflows/ci.yml)
+[![Upstream canary](https://github.com/diskret-io/Troskel/actions/workflows/upstream-canary.yml/badge.svg)](https://github.com/diskret-io/Troskel/actions/workflows/upstream-canary.yml)
 
 ## Air-gapped file transfer scanner
 
