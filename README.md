@@ -153,13 +153,6 @@ docs/
 
 | Item                                                | Status     |
 |-----------------------------------------------------|------------|
-| Two-engine scan pipeline (ClamAV + LOKI-RS)         | ✅ done     |
-| Firecracker microVM isolation                       | ✅ done     |
-| CoreOS live-USB scanning host                       | ✅ done     |
-| Docker-based build and test workflow                | ✅ done     |
-| Guided admin workflow (`troskel-build.sh`)          | ✅ done     |
-| Configurable tunables (`config/scanner.env`)        | ✅ done     |
-| Upstream canary (daily reachability + weekly build) | ✅ done     |
 | YARA rule freshness gate in `check-system-ready`    | 🔜 next    |
 | SHA-256 verification of downloaded artefacts        | 🔜 next    |
 | ClamAV heuristic and PUA detection tightening       | 🔜 next    |
