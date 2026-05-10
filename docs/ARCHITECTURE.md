@@ -1,108 +1,140 @@
-# ARCHITECTURE
+# Architecture
+
+## System overview
+
+Troskel splits into two physically separate machines connected only by USB sticks. The boundary between them is the air gap.
+
+```mermaid
+graph LR
+    subgraph build ["Build station (networked)"]
+        A[Download signatures\n& rules] --> B[Build scanner\nimage]
+        B --> C[Write USBs]
+    end
+
+    C -->|TROSKEL-BOOT| D
+    C -->|TROSKEL-DATA| D
+
+    subgraph host ["Scanning host (air-gapped)"]
+        D[Boot CoreOS\ninto RAM] --> E[Load scanner\nfrom data USB]
+        E --> F[troskel]
+        F --> G{Verdict}
+    end
+
+    G -->|green| H[Transfer files]
+    G -->|red| I[Reject files]
+    G -->|yellow| J[Contact admin]
+```
+
+---
 
 ## Why two machines
 
-Signature freshness needs internet; air-gapped operation forbids it. The design partitions the workflow: 
-- A networked **build station** produces artefacts
-- An air-gapped **scanning host** consumes them.
+Signature freshness needs internet. Air-gapped operation forbids it. The split enforces this cleanly: the build station pulls and the scanning host consumes. The two machines never touch the same network.
+
+---
 
 ## Why two USB sticks
 
-The boot USB and the data USB serve distinct purposes.
+```mermaid
+graph TD
+    subgraph boot ["TROSKEL-BOOT"]
+        B1[CoreOS live image]
+        B2[Ignition config]
+    end
 
-- The **boot USB** carries the operating system. It is essentially read-only in operation.
+    subgraph data ["TROSKEL-DATA"]
+        D1[scanner-rootfs.ext4]
+        D2[vmlinux]
+        D3[signature-date]
+        D4[scanner.env]
+    end
 
-- The **data USB** carries the scanner image, kernel, and signature metadata.
+    boot -->|"boots into RAM\n(read-only)"| H[Scanning host]
+    data -->|"load-scanner copies\nto RAM, then unmounts"| H
+```
 
-The split enforces a useful access pattern: `load-scanner` reads the data USB at one well-defined point in boot, copies its contents to RAM, and unmounts it. The data USB is never touched again during the session.
+The split enforces a clean access pattern. `load-scanner` reads the data USB once at boot, copies everything to RAM, and unmounts it. The data USB is never touched again during the session. There is no persistent writable storage on the scanning host.
+
+---
 
 ## Why CoreOS
 
-Four properties are required: boot from removable media into RAM, apply a declarative configuration on every boot, leave no persistent state, small attack surface. CoreOS satisfies all four.
+Four properties are required: boot from removable media into RAM, apply a declarative configuration on every boot, leave no persistent state, small attack surface. CoreOS satisfies all four. The configuration is compiled from `config/scanner-host.bu` using Butane and embedded into the boot ISO.
+
+---
 
 ## Why Firecracker
 
-The scans run against adversarial input. Both ClamAV and LOKI-RS have parser surfaces that should be assumed exploitable. 
+Both ClamAV and LOKI-RS have parser surfaces that should be assumed exploitable. Running them inside a Firecracker microVM means that exploiting a parser vulnerability gets the attacker inside the guest — not on the scanning host.
 
-Firecracker provides a hardware-virtualised boundary with an extremely small attack surface, purpose-built for serverless workloads with the explicit goal of minimising hypervisor exposure. 
+```mermaid
+graph TB
+    subgraph host ["Scanning host (CoreOS)"]
+        SW[scan-wrap] -->|"launches"| FC
 
-## Why Debian inside the guest
+        subgraph fc ["Firecracker microVM"]
+            subgraph guest ["Debian trixie guest (RAM only)"]
+                RS[run-scan.sh]
+                CA[ClamAV]
+                LK[LOKI-RS]
+                RS --> CA
+                RS --> LK
+            end
+        end
 
-The scanner image that runs inside Firecracker is built on Debian trixie minbase.
+        FC -->|"serial /dev/ttyS0\nVERDICT: string only"| SW
+    end
 
-ClamAV's behaviour on Debian is well-understood. Its packaging is mature, and its
-behaviour matches upstream documentation.
-
-## Why two engines
-
-Two engines with independent detection logic produce an OR over their detection sets. A file evading one may still be caught by the other.
-
-The two engines are deliberately complementary rather than overlapping:
-
-**ClamAV** is a signature-based AV engine with broad coverage of commodity malware, ransomware, and known exploits. Its strength is breadth: a large catalogue of known threats, archive unpacking, format-aware scanning of PE/ELF/script/document files.
-
-**LOKI-RS** is a YARA-rule and IOC scanner with a curated threat-hunting rule corpus. Its strength is targeted detection of web shells, hack tools, APT-associated artefacts, and malicious scripts, categories ClamAV covers less thoroughly. Uses the YARA Forge Core rule set by default and supports filename, hash, and C2 IOCs.
-
-Both engines are fundamentally pattern-based. The architecture is not equivalent to combining a signature-based AV with a behavioural or heuristic engine. 
-
-## Why an ext4 image for the scan target
-
-The data USB's content is presented to the guest as a read-only block device backed by an ext4 image. It has less hypervisor surface than alternatives plus a cleaner read-only enforcement than alternatives.
-
-## Why a 30-day signature freshness threshold
-
-Encoded in `check-system-ready`. Short enough that signatures are still reasonably current but without allowing to much drift.
-
-## Why the verdict pipeline is structured as it is
-
-The scan verdict is the highest-stakes output the system produces. Layered deliberately so no single component can produce a false-clean.
-
-**The guest entrypoint emits explicit verdict strings**, not numeric exit codes. Ambiguous outcomes are mapped conservatively. A clean result requires both engines to return 0clean results; a threat from either returns red. The guest then reboots, regardless of outcome.
-
-**The host parses with three discrete grep checks**, in order: `THREAT DETECTED` first (so a log containing both `THREAT DETECTED` and `CLEAN` is treated as a threat), `CLEAN` second, anything else falls through to UNCLEAR.
-
-**The logic is fail-closed.** A log matching neither pattern produces yellow. This covers empty logs, truncated logs, kernel panics, hypervisor crashes, OOM in the guest, ENOSPC during the scan, and any future failure mode we have not anticipated. The system never defaults to clean.
-
-The redundancy between guest-side and host-side logic is intentional. Either alone would be sufficient under nominal conditions; both are present so a defect in one cannot silently change the verdict.
-
-## Why power-off is the end-of-session signal
-
-The operator's workflow ends with powering off the scanning host. Not logout, not a session-end script. It relies on a hardware property (RAM loses state without power) rather than software correctness. Atomic, irreversible, and easily verifiable.
-
-## Component boundaries
- 
+    FILES[File USB\next4 image] -->|"read-only\nblock device"| fc
 ```
-File USB                       (UNTRUSTED — assumed adversarial)
-    │
-    ▼
-Hardware write blocker         (Read-only at USB protocol layer)
-    │
-    ▼
-Host kernel mount /mnt/usb     (Read-only mount option)
-    │
-    ▼
-mkfs.ext4 -d /mnt/usb scan.img (Materialised as opaque block image)
-    │
-    ▼
-losetup --read-only            (Read-only at block layer)
-    │
-    ▼
-virtio-blk drive (is_read_only: true)
-    │                          ◀── HARDWARE VIRTUALISATION BOUNDARY ──
-    ▼
-Guest: mount -o ro /dev/vdb    (Read-only mount inside guest)
-    │
-    ▼
-ClamAV  +  LOKI-RS             (UNTRUSTED — parsers assumed exploitable)
-    │
-    ▼
-Verdict on /dev/ttyS0          (One-way serial out)
-    │                          ◀── HARDWARE VIRTUALISATION BOUNDARY ──
-    ▼
-Host: /var/log/troskel/...  (Tmpfs — destroyed on power-off)
-    │
-    ▼
-grep VERDICT → green / red / yellow
+
+The serial channel is one-way text. The guest can only emit characters. A compromised guest cannot write to the host filesystem, open network connections, or influence the host beyond the verdict string it emits.
+
+---
+
+## Verdict pipeline
+
+```mermaid
+graph TD
+    A[ClamAV exits] --> C{Combine}
+    B[LOKI-RS exits] --> C
+    C -->|"THREAT in either"| D[VERDICT: THREAT DETECTED]
+    C -->|"CLEAN in both"| E[VERDICT: CLEAN]
+    C -->|"ERROR or no verdict"| F[VERDICT: ERROR]
+
+    D --> G[scan-wrap: red block]
+    E --> H[scan-wrap: green block]
+    F --> I[scan-wrap: yellow block]
 ```
- 
-This architecture means that even if an attacker breaks a scanner with a malformed file, their only way out is a one-way text channel the host reads with simple pattern checks. A green light requires the scanner to print 'VERDICT: CLEAN', but breaking it makes it crash rather than print that. The attacker is trapped; the only remaining attack is malware the rules don't recognise, which is a known limit of any pattern-matching scanner.
+
+The logic is fail-closed. Anything other than an explicit `VERDICT: CLEAN` in both engine paths produces yellow or red. An empty log, a guest kernel panic, an OOM kill, or garbage output all produce yellow.
+
+---
+
+## Configuration
+
+Two files govern all tunables:
+
+| File                  | Purpose                                                         | Used by                                                  |
+|-----------------------|-----------------------------------------------------------------|----------------------------------------------------------|
+| `config/versions.env` | Upstream component versions                                     | Build station scripts only                               |
+| `config/scanner.env`  | Operational policy (freshness thresholds, VM sizing, file caps) | Build station + propagated to scanning host via data USB |
+
+`scanner.env` travels to the scanning host on the data USB and is copied to `/var/lib/troskel/scanner.env` by `load-scanner` at boot. `check-system-ready` and `scan-wrap` source it at runtime. Admins adjust policy by editing `scanner.env` and running `troskel-build.sh --update` to write a fresh data USB.
+
+---
+
+## Why Debian trixie inside the guest
+
+Bookworm was the initial candidate but ships glibc 2.36, which is below the 2.39+ floor required by LOKI-RS v2.10.0. Trixie satisfies that constraint. This choice should be re-evaluated once trixie reaches stable, as the minbase package set may shift slightly.
+
+---
+
+## What is not defended against
+
+- **Novel malware with no signature.** Green means no engine matched any known signature — not guaranteed clean.
+- **BadUSB / HID injection.** A malicious USB presenting as a keyboard could type commands. Physical control of the scanning room and operator training are the mitigations.
+- **Compromised upstream artefacts.** Downloads are TLS-verified but not yet checksum-verified against published sidecars. See `docs/roadmap/checksum-verification.md`.
+- **Stale YARA rules.** Rule freshness is recorded but not yet enforced by `check-system-ready`. See `docs/roadmap/yara-freshness-gate.md`.
+
+See [`docs/SECURITY.md`](SECURITY.md) for the full threat model and residual risk register.

@@ -22,6 +22,8 @@ Build station (networked)                 Scanning host (air-gapped)
                                                power off → RAM cleared
 ```
 
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design rationale.
+
 ## Roles
 
 - **Admin** — prepares the two USBs on the build station before each scan session.
@@ -51,8 +53,8 @@ sudo bash scripts/troskel-build.sh
 | `--usb-data` | Write TROSKEL-DATA only (one USB needed)                                                                                                                                 |
 | `--usb-boot` | Write TROSKEL-BOOT only (one USB needed)                                                                                                                                 |
 | `--update`   | Refresh artefacts only, skip USB writing                                                                                                                                 |
-| `--host`     | Advanced: bypass Docker and run directly on the host. Requires all build tools installed manually via `prepare-build-machine.sh`. Not the expected path for most admins. |
 | `--debug`    | Show full output from all sub-steps                                                                                                                                      |
+| `--host`     | Advanced: bypass Docker and run directly on the host. Requires all build tools installed manually via `prepare-build-machine.sh`. Not the expected path for most admins. |
 
 ### First-time setup
 
@@ -117,6 +119,7 @@ config/
     show-status          Displays current scanner status
     check-system-ready   Pre-scan readiness checks
   versions.env           Pinned upstream component versions
+  scanner.env            Operational tunables (freshness thresholds, VM sizing)
 
 guest/
   run-scan.sh            In-VM scan entrypoint (runs inside Firecracker guest)
@@ -138,7 +141,7 @@ tests/
   manual-tests-scan.md   Manual test procedures (yellow path, cleanup, etc.)
 
 docs/
-  ARCHITECTURE.md        Design rationale
+  ARCHITECTURE.md        Design rationale with diagrams
   SECURITY.md            Security model and residual risks
   OPERATOR-GUIDE.md      Full operator reference
   roadmap/               Planned work
@@ -146,10 +149,29 @@ docs/
 
 ---
 
+## Roadmap
+
+| Item                                                | Status     |
+|-----------------------------------------------------|------------|
+| Two-engine scan pipeline (ClamAV + LOKI-RS)         | ✅ done     |
+| Firecracker microVM isolation                       | ✅ done     |
+| CoreOS live-USB scanning host                       | ✅ done     |
+| Docker-based build and test workflow                | ✅ done     |
+| Guided admin workflow (`troskel-build.sh`)          | ✅ done     |
+| Configurable tunables (`config/scanner.env`)        | ✅ done     |
+| Upstream canary (daily reachability + weekly build) | ✅ done     |
+| YARA rule freshness gate in `check-system-ready`    | 🔜 next    |
+| SHA-256 verification of downloaded artefacts        | 🔜 next    |
+| ClamAV heuristic and PUA detection tightening       | 🔜 next    |
+| capa as a third engine (capability-based detection) | 📋 planned |
+| Per-engine Firecracker VMs + parallel execution     | 📋 planned |
+
+---
+
 ## Security model
 
 The security guarantee is: files that reach the air-gapped environment have been scanned by two independent engines running in a hardware-virtualised microVM with no network access, against signatures updated before each session.
 
-**Green** means no engine matched any known signature. It does not mean guaranteed clean, novel malware with no signature will not be detected. This is the inherent limitation of signature-based scanning.
+**Green** means no engine matched any known signature. It does not mean guaranteed clean — novel malware with no signature will not be detected. This is the inherent limitation of signature-based scanning.
 
 See [`docs/SECURITY.md`](docs/SECURITY.md) for the full threat model, residual risks, and design rationale.
