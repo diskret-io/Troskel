@@ -8,7 +8,6 @@
 #   sudo bash scripts/troskel-build.sh [OPTIONS]
 #
 # Options:
-#   --host          Run directly on the host, skip container detection.
 #   --container     Insist on a container runtime; fail if none found.
 #   --usb-all       Write both boot USB and data USB (default).
 #   --usb-data      Write data USB only; expects one USB device.
@@ -39,15 +38,12 @@ else
 fi
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
-RUNTIME_MODE="auto"   # auto | host | container
 USB_MODE="all"        # all | data | boot
 UPDATE_ONLY=0
 DEBUG=0
 
 for arg in "$@"; do
     case "$arg" in
-        --host)       RUNTIME_MODE="host" ;;
-        --container)  RUNTIME_MODE="container" ;;
         --usb-all)    USB_MODE="all" ;;
         --usb-data)   USB_MODE="data" ;;
         --usb-boot)   USB_MODE="boot" ;;
@@ -106,38 +102,14 @@ run_step() {
 # ── Phase 0: Runtime detection ────────────────────────────────────────────────
 header "Runtime detection"
 
-CONTAINER_RUNTIME=""
-if [ "$RUNTIME_MODE" != "host" ]; then
-    if command -v docker >/dev/null 2>&1; then
-        CONTAINER_RUNTIME="docker"
-    fi
-fi
-
-if [ "$RUNTIME_MODE" = "container" ] && [ -z "$CONTAINER_RUNTIME" ]; then
-    fail "--container requested but Docker not found."
-    echo "    Install Docker: https://docs.docker.com/engine/install/"
-    exit 1
-fi
-
-if [ -n "$CONTAINER_RUNTIME" ]; then
-    ok "Container runtime: ${CONTAINER_RUNTIME}"
-    USE_CONTAINER=1
+if command -v docker >/dev/null 2>&1; then
+    CONTAINER_RUNTIME="docker"
+    ok "Container runtime: docker"
 else
-    if [ "$RUNTIME_MODE" = "host" ]; then
-        warn "Running directly on host (--host requested)."
-    else
-        warn "Docker not found — running directly on host."
-        warn "Required tools must be installed (see scripts/prepare-build-machine.sh)."
-    fi
-    USE_CONTAINER=0
-fi
-
-# When running on host, must be root.
-if [ "$USE_CONTAINER" -eq 0 ] && [ "$(id -u)" -ne 0 ]; then
-    fail "Must be run as root when not using a container."
-    echo "    Try: sudo bash scripts/troskel-build.sh $*"
+    fail "Docker not found. Install Docker: https://docs.docker.com/engine/install/"
     exit 1
 fi
+USE_CONTAINER=1
 
 # ── Phase 1: USB detection and assignment ─────────────────────────────────────
 if [ "$UPDATE_ONLY" -eq 0 ]; then
@@ -259,25 +231,7 @@ else
     PREFLIGHT_FAIL=1
 fi
 
-# Required tools (only when running on host)
-if [ "$USE_CONTAINER" -eq 0 ]; then
-    for TOOL in debootstrap butane firecracker curl; do
-        if command -v "$TOOL" >/dev/null 2>&1; then
-            ok "Tool present: ${TOOL}"
-        else
-            fail "Missing tool: ${TOOL}"
-            echo "    Run: sudo bash scripts/prepare-build-machine.sh"
-            PREFLIGHT_FAIL=1
-        fi
-    done
-    if [ -x /opt/loki-rs/loki ]; then
-        ok "Tool present: loki-rs"
-    else
-        fail "Missing tool: loki-rs at /opt/loki-rs/loki"
-        echo "    Run: sudo bash scripts/prepare-build-machine.sh"
-        PREFLIGHT_FAIL=1
-    fi
-fi
+
 
 # EFF wordlist (needed by prepare-boot-usb.sh for passphrase generation).
 # Download automatically if missing rather than failing preflight.
@@ -316,16 +270,12 @@ fi
 header "Updating artefacts"
 
 _run_update() {
-    if [ "$USE_CONTAINER" -eq 1 ]; then
-        "$CONTAINER_RUNTIME" run --rm --privileged \
-            --volume "${PROJECT_ROOT}:/troskel:z" \
-            --volume "troskel-artefacts:/var/lib/troskel:z" \
-            --workdir /troskel \
-            troskel-build \
-            bash scripts/run-update.sh
-    else
-        bash "${SCRIPT_DIR}/run-update.sh"
-    fi
+    "$CONTAINER_RUNTIME" run --rm --privileged \
+        --volume "${PROJECT_ROOT}:/troskel:z" \
+        --volume "troskel-artefacts:/var/lib/troskel:z" \
+        --workdir /troskel \
+        troskel-build \
+        bash scripts/run-update.sh
 }
 
 run_step "Downloading ClamAV signatures"     bash "${SCRIPT_DIR}/download-clamav-signatures.sh"

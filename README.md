@@ -49,13 +49,12 @@ sudo bash scripts/troskel-build.sh
 
 ### Flags
 
-| Flag         | Effect                                                                                                                                                                   |
-|--------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `--usb-data` | Write TROSKEL-DATA only (one USB needed)                                                                                                                                 |
-| `--usb-boot` | Write TROSKEL-BOOT only (one USB needed)                                                                                                                                 |
-| `--update`   | Refresh artefacts only, skip USB writing                                                                                                                                 |
-| `--debug`    | Show full output from all sub-steps                                                                                                                                      |
-| `--host`     | Advanced: bypass Docker and run directly on the host. Requires all build tools installed manually via `prepare-build-machine.sh`. Not the expected path for most admins. |
+| Flag         | Effect                                   |
+|--------------|------------------------------------------|
+| `--usb-data` | Write TROSKEL-DATA only (one USB needed) |
+| `--usb-boot` | Write TROSKEL-BOOT only (one USB needed) |
+| `--update`   | Refresh artefacts only, skip USB writing |
+| `--debug`    | Show full output from all sub-steps      |
 
 ### First-time setup
 
@@ -106,7 +105,7 @@ make scan       # Tier 3: Firecracker scan test — needs /dev/kvm (~5 min)
 make all        # run all three tiers in sequence
 ```
 
-Individual scripts under `scripts/` can also be run directly on a Debian host if you have the tools installed — useful when debugging a specific step. See [`tests/README.md`](tests/README.md) for more detail.
+See [`tests/README.md`](tests/README.md) for more detail.
 
 ---
 
@@ -154,12 +153,12 @@ docs/
 
 ## Roadmap
 
-| Item                                                    | Status     |
-|---------------------------------------------------------|------------|
-| SHA-256 verification of downloaded artefacts            | 🔜 next    |
-| ClamAV heuristic and PUA detection tightening           | 🔜 next    |
-| capa as a third engine (capability-based detection)     | 📋 planned |
-| Per-engine Firecracker VMs + parallel execution         | 📋 planned |
+| Item                                                | Status     |
+|-----------------------------------------------------|------------|
+| SHA-256 verification of downloaded artefacts        | 🔜 next    |
+| ClamAV heuristic and PUA detection tightening       | 🔜 next    |
+| capa as a third engine (capability-based detection) | 📋 planned |
+| Per-engine Firecracker VMs + parallel execution     | 📋 planned |
 
 ---
 
