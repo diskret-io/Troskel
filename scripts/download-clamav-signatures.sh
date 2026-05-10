@@ -12,11 +12,14 @@ SIGDIR="/var/lib/troskel"
 DB_OUT="${SIGDIR}/clamav-db"
 
 mkdir -p "$DB_OUT"
-# freshclam runs as the clamav user (UID 100) by default. Inside the
-# Docker container we run as root, so pass --user root to prevent the
-# privilege drop — the directory is owned by root and freshclam cannot
-# write to it otherwise.
-chown -R root:root "$DB_OUT"
+# Ensure the directory is owned by root. freshclam runs as the clamav
+# user (UID 100) by default and will refuse to write if the directory
+# is not owned by root or clamav. Passing --user root prevents the
+# privilege drop, but ownership must match.
+chown root:root "$DB_OUT"
+chmod 755 "$DB_OUT"
+# Remove any stale freshclam.dat that may be owned by another user.
+rm -f "${DB_OUT}/freshclam.dat"
 
 # freshclam writes directly into its configured DatabaseDirectory.
 # We point it at our staging dir so signatures land where
