@@ -116,6 +116,68 @@ summarise_engine() {
     esac
 }
 
+# show_findings — display flagged items from the scan log in a readable
+# format for the operator. Extracts ClamAV FOUND lines and LOKI-RS ALERT
+# records, strips internal paths, and truncates at MAX_FINDINGS items.
+show_findings() {
+    local LOG="$1"
+    local MAX_FINDINGS=20
+    local COUNT=0
+
+    # ClamAV: "path: SignatureName FOUND"
+    # Strip /mnt/scanfiles/ prefix so the operator sees the path relative
+    # to what was on the file USB, not the internal mount path.
+    local CLAM_FINDINGS
+    CLAM_FINDINGS="$(grep ' FOUND$' "$LOG" 2>/dev/null \
+        | sed 's|/mnt/scanfiles/||; s|: | — |' \
+        || true)"
+
+    if [ -n "$CLAM_FINDINGS" ]; then
+        echo ""
+        echo "  Flagged by ClamAV:"
+        while IFS= read -r LINE; do
+            [ -z "$LINE" ] && continue
+            printf "    %s\n" "$LINE"
+            COUNT=$((COUNT + 1))
+            [ "$COUNT" -ge "$MAX_FINDINGS" ] && { echo "    ... (see full log for more)"; break; }
+        done <<< "$CLAM_FINDINGS"
+    fi
+
+    # LOKI-RS: JSONL lines with "level":"ALERT"
+    # Extract file and rule fields. Use python3 if available; fall back to
+    # a grep+sed heuristic that handles the common case.
+    local LOKI_FINDINGS
+    LOKI_FINDINGS="$(grep '"level":"ALERT"' "$LOG" 2>/dev/null || true)"
+
+    if [ -n "$LOKI_FINDINGS" ]; then
+        echo ""
+        echo "  Flagged by LOKI-RS:"
+        COUNT=0
+        if command -v python3 >/dev/null 2>&1; then
+            echo "$LOKI_FINDINGS" | python3 -c '
+import sys, json
+for line in sys.stdin:
+    line = line.strip()
+    if not line: continue
+    try:
+        j = json.loads(line)
+        f = j.get("file", "?").replace("/mnt/scanfiles/", "")
+        r = j.get("rule", "?")
+        print(f"    {f} --- {r}")
+    except Exception:
+        print(f"    {line[:120]}")
+' 2>/dev/null | head -"$MAX_FINDINGS" || true
+        else
+            echo "$LOKI_FINDINGS" \
+                | sed 's/.*"file":"\([^"]*\)".*/\1/' \
+                | sed 's|/mnt/scanfiles/||' \
+                | head -"$MAX_FINDINGS" \
+                | sed 's/^/    /' \
+                || true
+        fi
+    fi
+}
+
 echo ""
 if grep -q "VERDICT: THREAT DETECTED" "$SCAN_LOG"; then
     printf '\033[1;41m                                                \033[0m\n'
@@ -124,9 +186,11 @@ if grep -q "VERDICT: THREAT DETECTED" "$SCAN_LOG"; then
     echo ""
     summarise_engine "ClamAV"  "clamav"
     summarise_engine "LOKI-RS" "loki"
+    show_findings "$SCAN_LOG"
     echo ""
-    echo "Full log: $SCAN_LOG"
-    echo "For flagged item details:  grep -E 'FOUND\$|\"level\":\"ALERT\"' \"$SCAN_LOG\""
+    echo "  Do not transfer any files from this USB."
+    echo "  Full log: $SCAN_LOG"
+    echo "  (Photograph this screen before powering off — the log is lost on shutdown)"
 elif grep -q "VERDICT: CLEAN" "$SCAN_LOG"; then
     printf '\033[1;42m                                                \033[0m\n'
     printf '\033[1;42m   *** CLEAN — Files may proceed               \033[0m\n'
@@ -135,7 +199,7 @@ elif grep -q "VERDICT: CLEAN" "$SCAN_LOG"; then
     summarise_engine "ClamAV"  "clamav"
     summarise_engine "LOKI-RS" "loki"
     echo ""
-    echo "Full log: $SCAN_LOG"
+    echo "  Full log: $SCAN_LOG"
 else
     printf '\033[1;43m                                                \033[0m\n'
     printf '\033[1;43m   *** RESULT UNCLEAR — Contact admin           \033[0m\n'
@@ -144,6 +208,10 @@ else
     summarise_engine "ClamAV"  "clamav"
     summarise_engine "LOKI-RS" "loki"
     echo ""
-    echo "No recognisable verdict in log. Do not transfer files."
-    echo "Full log: $SCAN_LOG"
+    echo "  The scanner did not complete normally."
+    echo "  The files have NOT been scanned. Do not transfer them."
+    echo ""
+    echo "  Contact the admin with this information:"
+    echo "    Log: $SCAN_LOG"
+    echo "    (Photograph this screen before powering off — the log is lost on shutdown)"
 fi

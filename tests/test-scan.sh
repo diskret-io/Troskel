@@ -93,7 +93,14 @@ if ! grep -q '^\[..:..:..\] ENGINE: loki status=threat' /tmp/scan-red.log; then
     grep '^\[..:..:..\] ENGINE:' /tmp/scan-red.log
     exit 1
 fi
-echo '[+] EICAR detected by both engines as expected'
+# Also assert that the flagged filename is displayed on screen —
+# not just that VERDICT: THREAT DETECTED is present. This confirms
+# the improved verdict output (show_findings) is working.
+if ! grep -q 'EICAR' /tmp/scan-red.log; then
+    echo '[!] EICAR filename not shown in verdict output — show_findings may be broken'
+    exit 1
+fi
+echo '[+] EICAR detected by both engines and flagged filename shown on screen'
 
 # --- Scan 2: Green --------------------------------------------------------
 
