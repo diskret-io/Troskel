@@ -109,7 +109,6 @@ else
     fail "Docker not found. Install Docker: https://docs.docker.com/engine/install/"
     exit 1
 fi
-USE_CONTAINER=1
 
 # ── Phase 1: USB detection and assignment ─────────────────────────────────────
 if [ "$UPDATE_ONLY" -eq 0 ]; then
