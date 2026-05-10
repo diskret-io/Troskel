@@ -6,6 +6,58 @@ This guide is technical. Site policy on what to do with flagged file USBs (retur
 
 ---
 
+## The file USB — preparing files for scanning
+
+The file USB is a standard USB storage device containing the files you want to transfer into the air-gapped environment. It is separate from the TROSKEL-BOOT and TROSKEL-DATA USBs used by the scanning host itself.
+
+**Format:** Any filesystem the scanning host can mount — ext4, FAT32, and exFAT all work. NTFS works on most configurations. There is no special preparation required. Copy the files to the USB as you normally would on any machine.
+
+**What to put on it:** The files you intend to transfer — documents, software packages, datasets, or anything else. Organise them however you like. `troskel` scans everything on the USB recursively, including files inside subdirectories.
+
+**What the scanner does with it:** `troskel` detects the file USB automatically when you run it, mounts it read-only, copies its contents into the Firecracker microVM as a read-only block device, and scans everything inside. The USB itself is never written to during the scan. After the scan completes the USB is unmounted and you can remove it safely.
+
+**If you have multiple USBs plugged in:** `troskel` picks the last hotplug USB device it detects. To avoid ambiguity, plug in only the file USB when running the scan. The TROSKEL-DATA USB is already unmounted after boot and will not be confused with the file USB.
+
+---
+
+## Scan session — step by step
+
+1. **Prepare the file USB** on any networked machine — copy the files you want to transfer onto a standard USB drive.
+
+2. **Transport** the file USB and yourself to the air-gapped room.
+
+3. **Insert both TROSKEL USBs** (boot and data) into the scanning host and power on. Do not insert the file USB yet.
+
+4. **Log in** as `scanner` with the passphrase from the admin.
+
+5. **Check the system is ready:**
+   ```
+   show-status
+   check-system-ready
+   ```
+   Both must pass before scanning. If either reports a problem, see the troubleshooting section below.
+
+6. **Insert the file USB.** Wait a moment for the OS to register it.
+
+7. **Run the scan:**
+   ```
+   troskel
+   ```
+   The scan runs automatically — it detects the file USB, mounts it, scans everything on it, and displays the verdict. Do not remove any USB during the scan.
+
+8. **Read the verdict:**
+   - **GREEN** — files may be transferred. Remove the file USB and carry it to the destination.
+   - **RED** — do not transfer. See the Red verdict section below.
+   - **YELLOW** — something went wrong with the scanner itself. Contact the admin.
+
+9. **Power off when finished:**
+   ```
+   sudo poweroff
+   ```
+   The scan log lives in RAM and is lost on power off. If the admin needs the log, photograph the screen before powering off.
+
+---
+
 ## Verdicts
 
 ### Green — `*** CLEAN — Files may proceed ***`
@@ -33,112 +85,74 @@ For the details of what was flagged:
 grep -E 'FOUND$|"level":"ALERT"' /var/log/troskel/scan-*.log
 ```
 
-ClamAV's `FOUND` lines and LOKI-RS's JSONL `ALERT` records are the authoritative finding details. Note that the log lives in tmpfs and will be lost when you power off, if the admin needs the log, photograph the screen before powering off.
-
-Then follow your site's policy for handling the file USB and power off:
-
-```bash
-sudo poweroff
-```
+ClamAV's `FOUND` lines and LOKI-RS's JSONL `ALERT` records are the authoritative finding details. Note that the log lives in tmpfs and will be lost when you power off — if the admin needs the log, photograph the screen before powering off.
 
 ### Yellow — `*** RESULT UNCLEAR — Contact admin ***`
 
-The scan did not produce a recognisable verdict. This is intentional: the system is fail-closed, so any outcome that is not unambiguously clean produces yellow rather than green. Common causes, in rough order of likelihood:
+Neither a clean nor a threat verdict was produced. This means something went wrong with the scanning infrastructure itself — the VM crashed, ran out of memory, or produced unrecognisable output. The files have not been scanned. Do not transfer them.
 
-- **An engine errored.** The per-engine breakdown will show `ERROR` next to one or both engines. The most common cause is a corrupted signature or rule file in the scanner image; the admin will need to rebuild the data USB.
-- **The guest crashed during the scan.** A malformed file in the scan target can crash a scanner parser. The hypervisor catches this, but no verdict is emitted. The file USB should be treated as suspicious — a file that crashes a parser is, by definition, abnormal.
-- **Resource exhaustion.** A very large file or an archive bomb can exhaust the guest's memory. The guest reboots, no verdict is emitted, yellow is shown.
-
-Do not transfer files from the file USB. Treat yellow as "no information", not "probably clean".
-
-When contacting the admin, the useful information to provide is:
-
-- The yellow block's per-engine breakdown (which engine, if any, reported `ERROR`).
-- The scan log on screen — photograph it before powering off if the admin wants to inspect it. The log is at `/var/log/troskel/scan-<timestamp>.log` but lives in tmpfs and will be lost at power-off.
-- A rough description of the file USB contents, particularly anything unusual (very large files, unfamiliar archive formats, files from an unusual source).
-
-Power off when the admin has what they need:
+Contact the admin with the output of:
 
 ```bash
-sudo poweroff
+show-status
+cat /var/log/troskel/scan-*.log
 ```
 
 ---
 
-## Readiness check failures
+## Troubleshooting `check-system-ready` failures
 
-Two commands report system state:
-
-- **`show-status`** is the primary diagnostic. It is fast, has no exit-code semantics, and shows everything needed to triage a problem in one screen: signature date, scanner image presence, KVM state, last scan, last result. Run this first.
-- **`check-system-ready`** is the gate. It runs seven checks and exits non-zero if any fail. Scanning is permitted only when it passes.
-
-When something is wrong, run `show-status` first to see the system's overall state, then run `check-system-ready` to identify which specific check failed. The categorised list below maps each `check-system-ready` failure to whether the operator can resolve it.
-
-A failure does not always mean the admin needs to be involved, some failures are things the operator can resolve in the room.
+`show-status` gives an overview. `check-system-ready` identifies the specific failing check. Run this first.
 
 ### Operator can resolve
 
 **`Scanner image loaded — not found`** and **`Guest kernel loaded — not found`**
 
-The data USB is either not plugged in or `load-scanner` did not run successfully at boot. Steps:
+The data USB either is not plugged in or `load-scanner` did not run successfully at boot. Steps:
 
-1. Confirm the data USB is plugged in and that the LED (if it has one) indicates activity.
-2. Reboot:
+1. Confirm the data USB is plugged in.
+2. Reboot: `sudo reboot`
+3. Log in and re-run `show-status` and `check-system-ready`.
 
-   ```bash
-   sudo reboot
-   ```
+If the failure persists after a reboot with the data USB plugged in, the data USB may be faulty or unwritten. Contact the admin.
 
-3. After reboot, log in as `scanner` and re-run:
+**`Signature date present and fresh — signatures are N days old`**
 
-   ```bash
-   show-status
-   check-system-ready
-   ```
+The scanner image is older than the configured freshness threshold. A fresh data USB from the admin is needed. The operator cannot resolve this in the room but can tell the admin exactly what is needed.
 
-If the failure persists after a reboot with the data USB plugged in, the data USB itself may be faulty or unwritten. Contact the admin; a fresh data USB from the build station is needed.
+**`YARA rules date present and fresh — rules are N days old`**
 
-**`Signature date present and fresh — signatures are N days old, run update`**
-
-The scanner image is older than 30 days. The system will not scan with stale signatures. The fix is a fresh data USB from the admin, prepared on the build station with `run-update.sh`. The operator cannot resolve this in the room, but the operator *can* identify it as the cause and tell the admin exactly what is needed, which shortens the handoff.
+Same as above but for the LOKI-RS rule set. Fresh data USB needed.
 
 ### Admin must resolve
 
 **`No active network interfaces beyond loopback — N interface(s) active`**
 
-The scanning host has come up with a network interface enabled. This must not happen and is a build-configuration regression. Power off and contact the admin. Do not scan.
+A network interface is active. This must not happen. Power off and contact the admin. Do not scan.
 
 **`KVM accessible — not accessible`**
 
-Hardware virtualisation is unavailable. The scanner cannot run. Either the BIOS has VT-x / AMD-V disabled, or the hardware does not support it. Power off and contact the admin.
+Hardware virtualisation is unavailable. Power off and contact the admin.
 
 **`Auto-update (zincati) is disabled — status: ...`**
 
-The auto-update daemon is not in its expected state. This is a build-configuration regression. Power off and contact the admin.
+Build-configuration regression. Power off and contact the admin.
 
-**`No network interface in scan config — network config found, review run-scan`**
+**`No network interface in scan config — network config found`**
 
-The Firecracker scan configuration contains a network interface. This must not happen and indicates either a tampered scanner image or a build regression. Power off and contact the admin. **Do not scan, even if other checks pass.**
+The Firecracker config contains a network interface. This must not happen and indicates tampering or a build regression. Power off and contact the admin. **Do not scan, even if other checks pass.**
 
-**`Signature date present — not found`**
+**`Signature date present — not found`** or **`YARA rules date present — not found`**
 
-The freshness file is missing entirely. The data USB is either malformed or did not load correctly. Contact the admin for a fresh data USB.
+The freshness file is missing entirely. The data USB is malformed or did not load. Contact the admin for a fresh data USB.
 
 ---
 
 ## What to tell the admin
 
-When contacting the admin about any of the above, the useful information is:
+When contacting the admin, the useful information is:
 
-- The output of `show-status`: this is the single most useful artefact and should be shared first. It captures signature date, image load state, KVM accessibility, and the last scan's result in one screen.
-- The exact text of the failed check or yellow/red block, as displayed.
-- For verdict failures: a photograph of the scan log on screen before power-off, if the admin asks for it. The log path is `/var/log/troskel/scan-<timestamp>.log` but the log lives in tmpfs and is lost at power-off.
-- For readiness failures: whether the same failure has occurred before in this session (relevant for transient versus persistent issues).
-
-Power off before stepping away from the host:
-
-```bash
-sudo poweroff
-```
-
-The host is not designed for unattended idle, RAM is the only place state lives, and the right moment to clear it is at the end of the session.
+- The output of `show-status` — share this first.
+- The output of `check-system-ready` — identifies which check failed.
+- The scan log if a yellow verdict occurred: `cat /var/log/troskel/scan-*.log`
+- The signature date shown in `show-status` — this tells the admin whether a fresh data USB is needed.
