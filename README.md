@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/diskret-io/Troskel/actions/workflows/ci.yml/badge.svg)](https://github.com/diskret-io/Troskel/actions/workflows/ci.yml)
 [![Upstream canary](https://github.com/diskret-io/Troskel/actions/workflows/upstream-canary.yml/badge.svg)](https://github.com/diskret-io/Troskel/actions/workflows/upstream-canary.yml)
+![license](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
 ## Air-gapped file transfer scanner
 
