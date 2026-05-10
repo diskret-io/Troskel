@@ -30,9 +30,9 @@ trap cleanup EXIT
 
 # Sanity-check inputs before doing the slow debootstrap.
 [ -d "${SIGDIR}/clamav-db" ]  \
-    || { echo "[!] Missing ${SIGDIR}/clamav-db — run download-latest-signatures.sh first."; exit 1; }
+    || { echo "[!] Missing ${SIGDIR}/clamav-db — run download-clamav-signatures.sh first."; exit 1; }
 [ -d "${SIGDIR}/yara-rules" ] \
-    || { echo "[!] Missing ${SIGDIR}/yara-rules — run download-yara-rules.sh first."; exit 1; }
+    || { echo "[!] Missing ${SIGDIR}/yara-rules — run download-loki-yara-rules.sh first."; exit 1; }
 [ -x "${LOKI_HOST_DIR}/loki" ] \
     || { echo "[!] Missing ${LOKI_HOST_DIR}/loki — run prepare-build-machine.sh first."; exit 1; }
 [ -f "${SCRIPT_DIR}/../guest/run-scan.sh" ] \
@@ -70,7 +70,7 @@ echo "[*] Installing LOKI-RS..."
 mkdir -p "${WORK}/opt/loki-rs"
 cp -r "${LOKI_HOST_DIR}/." "${WORK}/opt/loki-rs/"
 # Replace the tarball-bundled (and already stale) signatures with the
-# refreshed copy. download-yara-rules.sh just ran loki-util update on the
+# refreshed copy. download-loki-yara-rules.sh just ran loki-util update on the
 # build station; this is the same data, materialised into the rootfs.
 rm -rf "${WORK}/opt/loki-rs/signatures"
 mkdir -p "${WORK}/opt/loki-rs/signatures"

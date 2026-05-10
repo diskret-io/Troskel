@@ -77,10 +77,10 @@ butane --strict --files-dir config "$TMP_CONFIG" > /dev/null
 echo "[+] Butane OK"
 
 step "2/5  Download ClamAV signatures"
-bash scripts/download-latest-signatures.sh
+bash scripts/download-clamav-signatures.sh
 
-step "3/5  Refresh YARA Forge Core rules"
-bash scripts/download-yara-rules.sh
+step "3/5  Refresh LOKI-RS YARA rules"
+bash scripts/download-loki-yara-rules.sh
 
 step "4/5  Download guest kernel"
 bash scripts/download-kernel.sh

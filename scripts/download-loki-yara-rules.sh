@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/download-yara-rules.sh
+# scripts/download-loki-yara-rules.sh
 # Refreshes the YARA Forge Core rule set and IOC files used by LOKI-RS.
 # Run on the build station as part of run-update.sh.
 #
@@ -31,11 +31,6 @@ rm -rf "$RULES_OUT"
 mkdir -p "$RULES_OUT"
 cp -r "${LOKI_DIR}/signatures/." "${RULES_OUT}/"
 
-# Record refresh time. The scanner host's freshness check reads
-# signature-date (set by download-latest-signatures.sh); the YARA-rules
-# date is recorded separately for auditability but is not currently
-# enforced by check-system-ready. Worth revisiting if YARA-rule
-# freshness becomes a separate concern from ClamAV-signature freshness.
 date -u --iso-8601=seconds > "${SIGDIR}/yara-rules-date"
 
 RULE_COUNT="$(find "$RULES_OUT" -type f -name '*.yar*' | wc -l)"

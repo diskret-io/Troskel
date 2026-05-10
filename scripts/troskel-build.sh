@@ -328,8 +328,8 @@ _run_update() {
     fi
 }
 
-run_step "Downloading ClamAV signatures"     bash "${SCRIPT_DIR}/download-latest-signatures.sh"
-run_step "Refreshing YARA Forge Core rules"  bash "${SCRIPT_DIR}/download-yara-rules.sh"
+run_step "Downloading ClamAV signatures"     bash "${SCRIPT_DIR}/download-clamav-signatures.sh"
+run_step "Refreshing LOKI-RS YARA rules"     bash "${SCRIPT_DIR}/download-loki-yara-rules.sh"
 run_step "Downloading guest kernel"          bash "${SCRIPT_DIR}/download-kernel.sh"
 run_step "Building scanner image"            bash "${SCRIPT_DIR}/build-scanner-image.sh"
 
