@@ -25,18 +25,19 @@ chown -R root:root "$DB_OUT"
 # /etc/clamav/freshclam.conf is absent (e.g. NixOS, or Docker containers
 # that installed clamav-freshclam without running the postinst script).
 FRESHCLAM_CONF="$(mktemp --suffix=.conf)"
+FRESHCLAM_LOG="$(mktemp)"
 cat > "$FRESHCLAM_CONF" <<CONF
 DatabaseDirectory ${DB_OUT}
 DatabaseMirror database.clamav.net
-UpdateLogFile /dev/null
+UpdateLogFile ${FRESHCLAM_LOG}
 LogSyslog false
 LogRotate false
 MaxAttempts 3
 CONF
 
 echo "[*] Downloading ClamAV signatures via freshclam..."
-freshclam --user root --config-file="$FRESHCLAM_CONF"     || { rm -f "$FRESHCLAM_CONF"; echo "[!] freshclam failed — check internet connectivity or DNS."; exit 1; }
-rm -f "$FRESHCLAM_CONF"
+freshclam --user root --config-file="$FRESHCLAM_CONF"     || { rm -f "$FRESHCLAM_CONF" "$FRESHCLAM_LOG"; echo "[!] freshclam failed — check internet connectivity or DNS."; exit 1; }
+rm -f "$FRESHCLAM_CONF" "$FRESHCLAM_LOG"
 
 SIG_DATE="$(date -u --iso-8601=seconds)"
 echo "$SIG_DATE" > "${SIGDIR}/signature-date"
