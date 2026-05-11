@@ -135,6 +135,5 @@ Bookworm was the initial candidate but ships glibc 2.36, which is below the 2.39
 - **Novel malware with no signature.** Green means no engine matched any known signature — not guaranteed clean.
 - **BadUSB / HID injection.** A malicious USB presenting as a keyboard could type commands. Physical control of the scanning room and operator training are the mitigations.
 - **Compromised upstream artefacts.** Downloads are TLS-verified but not yet checksum-verified against published sidecars. See `docs/roadmap/checksum-verification.md`.
-- **Stale YARA rules.** Rule freshness is recorded but not yet enforced by `check-system-ready`. See `docs/roadmap/yara-freshness-gate.md`.
 
 See [`docs/SECURITY.md`](SECURITY.md) for the full threat model and residual risk register.

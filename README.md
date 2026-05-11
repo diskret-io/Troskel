@@ -153,12 +153,7 @@ docs/
 
 ## Roadmap
 
-| Item                                                | Status     |
-|-----------------------------------------------------|------------|
-| SHA-256 verification of downloaded artefacts        | 🔜 next    |
-| ClamAV heuristic and PUA detection tightening       | 🔜 next    |
-| capa as a third engine (capability-based detection) | 📋 planned |
-| Per-engine Firecracker VMs + parallel execution     | 📋 planned |
+Planned work is tracked in [`docs/roadmap/`](docs/roadmap/). Each document carries its own scope, sequencing, and target-version note. Looser-form ideas live in [`docs/roadmap/IDEAS.md`](docs/roadmap/IDEAS.md).
 
 ---
 

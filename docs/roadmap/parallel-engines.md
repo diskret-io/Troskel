@@ -2,17 +2,17 @@
 
 Currently ClamAV and LOKI-RS run sequentially inside a single Firecracker guest, sharing the same Debian rootfs, process namespace, and serial output channel. This task splits each engine into its own independent microVM and runs all VMs concurrently, reducing wall-clock scan time and strengthening the isolation boundary between engines.
 
-This document is written for three engines — ClamAV, LOKI-RS, and capa — as a first-class design target. Capa's resource profile and execution model differ enough from the other two that designing for two engines and retrofitting a third would require revisiting most of the decisions made here anyway. See `capa-third-engine.md` for capa-specific implementation detail.
+This document is written for three engines: ClamAV, LOKI-RS, and Capa, as a first-class design target. Capa's resource profile and execution model differ enough from the other two that designing for two engines and retrofitting a third would require revisiting most of the decisions made here anyway. See `capa-third-engine.md` for capa-specific implementation detail.
 
 ## Why not parallelism within a single VM
 
-The straightforward alternative — launch all three engines as background processes inside the current single guest and `wait` for all — was considered and rejected for three reasons.
+The straightforward alternative, launch all three engines as background processes inside the current single guest and `wait` for all, was considered and rejected for three reasons.
 
 **Resource contention is unmanageable at three engines.** ClamAV is I/O-heavy; LOKI-RS with `--threads 0` is CPU-heavy; capa's static disassembly is both CPU- and memory-hungry. `capa-third-engine.md` already notes that 2048 MiB may be tight for capa alone. Three engines sharing one VM's resource pool would require 6+ GiB to avoid contention-induced OOM kills, making the memory budget unpredictable and the sizing conversation intractable. Separate VMs allow each engine's footprint to be measured and sized independently.
 
 **The serial channel interleaving problem grows with each engine added.** With two or more concurrent processes writing to `/dev/ttyS0`, their output interleaves. The `ENGINE:` and `VERDICT:` lines the host parses could be corrupted mid-write. The mitigation — buffer all output to tmpfs, emit structured lines only after all engines finish — loses live scan progress and adds coordination logic that is difficult to audit. With separate VMs the serial channel is never shared.
 
-**Capa's "third pass" model fits the per-VM architecture naturally.** The capa roadmap doc suggests running capa only against files that the first two engines cleared, to manage scan time on the common case where ClamAV or LOKI-RS catches something early. This is straightforward with separate VMs: the host simply does not start the capa VM if either of the first two returns a threat verdict. Implementing selective execution within a shared VM would require a coordination layer inside the guest that does not currently exist.
+**Capa's "third pass" model fits the per-VM architecture naturally.** The Capa roadmap doc suggests running Capa only against files that the first two engines cleared, to manage scan time on the common case where ClamAV or LOKI-RS catches something early. This is straightforward with separate VMs: the host simply does not start the capa VM if either of the first two returns a threat verdict. Implementing selective execution within a shared VM would require a coordination layer inside the guest that does not currently exist.
 
 The single-VM parallelism option is recorded here as a deliberate path not taken, so future contributors do not need to reconstruct this analysis.
 
@@ -33,7 +33,7 @@ One VM, one serial log, one verdict. The host greps the single log for `VERDICT:
 
 ```
 Host: run-scan
-  ├─ Firecracker VM — clamav-guest  ─┐
+  ├─ Firecracker VM — clamav-guest   ─┐
   │    └─ guest/run-clamav.sh         │  started concurrently
   │         └─ VERDICT → clamav.log   │
   │                                   │
@@ -75,9 +75,9 @@ Each script is simpler than the combined `run-scan.sh` because verdict combinati
 
 Three separate ext4 images are built:
 
-- `scanner-rootfs-clamav.ext4` — Debian minbase + ClamAV + signatures. No LOKI-RS, no capa.
-- `scanner-rootfs-loki.ext4` — Debian minbase + LOKI-RS + YARA rules. No ClamAV, no capa.
-- `scanner-rootfs-capa.ext4` — Debian minbase + capa binary + rules. No ClamAV, no LOKI-RS.
+- `scanner-rootfs-clamav.ext4`: Debian minbase + ClamAV + signatures. No LOKI-RS, no capa.
+- `scanner-rootfs-loki.ext4`: Debian minbase + LOKI-RS + YARA rules. No ClamAV, no capa.
+- `scanner-rootfs-capa.ext4`: Debian minbase + capa binary + rules. No ClamAV, no LOKI-RS.
 
 Each image contains only what its engine needs. The ClamAV image has no YARA rule attack surface; the LOKI-RS image has no ClamAV parser surface; the capa image has neither. This makes each image independently auditable and keeps image sizes smaller than a combined rootfs would be.
 
@@ -112,7 +112,7 @@ The fail-closed logic is preserved and extended: a missing or empty log from any
 
 With ClamAV and LOKI-RS running concurrently the natural allocation is 1 vCPU and 1024 MiB RAM per VM. Both engines fit comfortably within these bounds individually. Capa requires more memory for disassembly; `capa-third-engine.md` recommends measuring against a representative corpus before committing, but 2 vCPUs and 2048 MiB is a reasonable starting point.
 
-After `scanner-config.md` lands, per-engine sizing lives in `config/scanner.env`. Per-engine variables are warranted here because the engines have meaningfully different resource profiles:
+Per-engine sizing lives in `config/scanner.env` alongside the existing freshness thresholds. Per-engine variables are warranted here because the engines have meaningfully different resource profiles:
 
 ```sh
 CLAM_GUEST_VCPU_COUNT=1
@@ -125,7 +125,7 @@ CAPA_GUEST_VCPU_COUNT=2
 CAPA_GUEST_MEM_MIB=2048
 ```
 
-This follows the engine-prefixed naming convention established in `scanner-config.md`.
+This follows the engine-prefixed naming convention already used by the existing per-engine tunables in `scanner.env` (e.g. `LOKI_MAX_FILE_SIZE`, `LOKI_YARA_MAX_AGE_DAYS`).
 
 ### Scan-target block device sharing
 
@@ -175,12 +175,7 @@ Two to three days. The rootfs build refactor with shared base, the host-side ver
 
 ## Sequencing
 
-Depends on:
-- `scanner-config.md` — per-engine VM sizing variables must exist before this task lands.
-- `extract-guest-scripts.md` — the entrypoint split is much cleaner once `guest/run-scan.sh` is a standalone file rather than a heredoc.
-- `capa-third-engine.md` — the capa guest entrypoint, verdict policy, and executable-extraction logic are defined there; this task consumes those definitions.
-
-Does not depend on `yara-freshness-gate.md` or the Butane script extraction beyond `extract-guest-scripts.md`.
+Depends on `capa-third-engine.md` — the capa guest entrypoint, verdict policy, and executable-extraction logic are defined there; this task consumes those definitions.
 
 Target `1.1.0`. The current single-VM sequential design is correct and safe; this task makes it faster and better isolated, but it is not a correctness fix and should not block `1.0.0`.
 
