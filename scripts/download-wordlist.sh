@@ -5,26 +5,28 @@
 # Safe to re-run — skips the download if the file is already present
 # and its checksum is correct.
 #
+# Version and SHA-256 are sourced from config/versions.env. To bump
+# the wordlist, edit WORDLIST_URL and WORDLIST_SHA256 there.
+#
 # Licence: the wordlist is published by the Electronic Frontier Foundation
 # under CC-BY 3.0. See THIRD_PARTY_NOTICES.md for attribution details.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-DEST="${SCRIPT_DIR}/../config/eff-large-wordlist.txt"
-URL="https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt"
+# shellcheck source=../config/versions.env
+source "${SCRIPT_DIR}/../config/versions.env"
 
-# SHA-256 of the canonical upstream file. Recorded in SBOM.json.
-EXPECTED_SHA256="addd35536511597a02fa0a9ff1e5284677b8883b83e986e43f15a3db996b903e"
+DEST="${SCRIPT_DIR}/../config/eff-large-wordlist.txt"
 
 verify() {
     local FILE="$1"
     local ACTUAL
     ACTUAL="$(sha256sum "$FILE" | awk '{print $1}')"
-    if [ "$ACTUAL" = "$EXPECTED_SHA256" ]; then
+    if [ "$ACTUAL" = "$WORDLIST_SHA256" ]; then
         return 0
     else
         echo "[!] SHA-256 mismatch."
-        echo "    Expected : ${EXPECTED_SHA256}"
+        echo "    Expected : ${WORDLIST_SHA256}"
         echo "    Got      : ${ACTUAL}"
         return 1
     fi
@@ -42,7 +44,7 @@ if [ -f "$DEST" ]; then
 fi
 
 echo "[*] Downloading EFF Long Wordlist..."
-curl -fsSL "$URL" -o "$DEST" \
+curl -fsSL "$WORDLIST_URL" -o "$DEST" \
     || { echo "[!] Download failed. Check internet connectivity."; rm -f "$DEST"; exit 1; }
 
 echo "[*] Verifying checksum..."
