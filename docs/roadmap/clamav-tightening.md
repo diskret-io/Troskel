@@ -43,6 +43,14 @@ Pure signature matching. Heuristic flags off, PUA detection off, bytecode signat
 
 Small. Half a day, mostly spent on the test fixture and calibration. No architectural changes.
 
+## Sequencing
+
+Independent of the other roadmap items. No dependencies.
+
+Target `1.0.0`. Engaging these flags is `1.0.0`-grade hardening: same engine, same scan time, broader coverage of exactly the threats a transfer scanner should catch (encrypted archives, malformed PEs, dual-use tools). Shipping `1.0.0` while ClamAV runs in signature-only mode would mean leaving free detection capability on the table.
+
+Should land alongside `improved-verdict-output.md`. The new `--alert-encrypted` and `--alert-broken` flags will produce visible behavioural change — legitimate password-protected archives and structurally unusual PEs that previously passed as green will now go red. Operators need to see *what* was flagged, not just the verdict, or the change is frustrating rather than informative. The two changes are individually small but coupled in operator experience.
+
 ## Open questions
 
 - Should encrypted-content alerts be a separate verdict tier (yellow) rather than red? Treating them as threats is the conservative default but may produce too many false-positive reds on legitimate password-protected archives.

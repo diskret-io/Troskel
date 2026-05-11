@@ -49,6 +49,23 @@ Larger than the ClamAV tightening. Two to three days, broken down:
 - ~half day: capability-to-verdict policy and calibration
 - ~half day: test fixtures and CI integration
 
+The two-to-three-day estimate covers the *integration* work and assumes the capability-to-verdict policy is already calibrated. The calibration itself is a separate research task with no fixed budget — see Sequencing.
+
+## Sequencing
+
+No hard dependencies on other roadmap documents. Per-engine Firecracker isolation in `parallel-engines.md` is a useful prerequisite but not a strict one: capa can be added to the existing single-VM design first and migrated into its own VM when the parallel architecture lands.
+
+Target `1.2.0`. Two reasons it should not be `1.1.0`:
+
+- **The capability-to-verdict policy is genuinely unresolved.** The Open Questions section below flags this as "the hard part and the place where the project takes on real opinion". A policy that produces too many false-positive reds makes capa worse than useless — it trains operators to dismiss the verdict. A policy that's too conservative produces a green light on findings that should be red. Either way, the calibration needs a corpus of representative known-good and known-bad transfers, which the project does not yet have. Squeezing the calibration into a `1.1.0` cycle risks shipping the wrong policy.
+- **Scan-time and memory budgets need measurement.** Capa is slower than YARA (the document estimates "minutes, not seconds" for 100 binaries) and memory-hungry enough that the current 2048 MiB guest may be tight. These are measurable concerns with measurable answers, but the measurement has to happen before commitment to a release.
+
+The `1.1.0` release ships per-engine Firecracker isolation with the two existing engines (ClamAV, LOKI-RS) running concurrently; capa integration in `1.2.0` then slots into that architecture as a third VM. This keeps each release coherent: `1.1.0` is the architectural change; `1.2.0` is the engine addition.
+
+## Side effects on other documents
+
+`SECURITY.md`'s "What is not defended against" section currently states that the existing two engines provide *detection diversity* (independent rule corpora, independent maintainers) rather than *paradigm orthogonality*. With capa landing in `1.2.0`, that text needs updating to acknowledge a real capability-based engine alongside the two pattern-based ones. The honest framing also needs to record what *remains* a residual risk: capa is still a static engine, so novel obfuscation that defeats both pattern-based detection and capability-based analysis (heavy packing, behaviour-only malware) will still pass. `ARCHITECTURE.md`'s "Why Firecracker" rationale gains a third engine name; the diagram needs an extra box.
+
 ## Open questions
 
 - **Capability-to-verdict policy.** This is the hard part and the place where the project takes on real opinion. A too-liberal policy floods the operator with false-positive reds; a too-conservative policy makes capa's contribution irrelevant. Worth prototyping against a corpus of known-good and known-bad transfers before committing.
