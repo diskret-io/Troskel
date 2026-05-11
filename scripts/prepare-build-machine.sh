@@ -13,6 +13,35 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=../config/versions.env
 source "${SCRIPT_DIR}/../config/versions.env"
 
+# ── SHA-256 verification helper ───────────────────────────────────────────────
+# Compares the SHA-256 of $FILE against $EXPECTED. Exits non-zero with a
+# clear message on mismatch. The error path names the file and both values
+# so a reader can identify which artefact failed and what to do about it.
+verify_sha256() {
+    local FILE="$1"
+    local EXPECTED="$2"
+    local LABEL="${3:-$FILE}"
+    local ACTUAL
+    ACTUAL="$(sha256sum "$FILE" | awk '{print $1}')"
+    if [ "$ACTUAL" = "$EXPECTED" ]; then
+        return 0
+    fi
+    echo ""
+    echo "[!] SHA-256 mismatch for ${LABEL}"
+    echo "    File     : ${FILE}"
+    echo "    Expected : ${EXPECTED}"
+    echo "    Got      : ${ACTUAL}"
+    echo ""
+    echo "    The downloaded artefact does not match the value recorded in"
+    echo "    config/versions.env. Possible causes:"
+    echo "      - The upstream release was re-published (compare against the"
+    echo "        current .sha256 sidecar on the GitHub release page)."
+    echo "      - The download was corrupted in transit (retry)."
+    echo "      - A man-in-the-middle has substituted a tampered artefact."
+    echo ""
+    return 1
+}
+
 # Colour helpers
 if [ -t 1 ]; then
     C_RESET='\033[0m'; C_GREEN='\033[0;32m'
@@ -114,32 +143,37 @@ if printf '%s\n' "${MISSING_MANUAL[@]}" | grep -q '__firecracker__'; then
     echo "=== Installing Firecracker ${FC_VERSION} ==="
     echo ""
     [ "$(id -u)" -eq 0 ] || { fail "Root required. Re-run with sudo."; exit 1; }
+    TMPDIR_FC="$(mktemp -d)"
+    trap 'rm -rf "$TMPDIR_FC"' EXIT
     curl -fsSL \
         "https://github.com/firecracker-microvm/firecracker/releases/download/${FC_VERSION}/firecracker-${FC_VERSION}-x86_64.tgz" \
-        | tar --no-same-owner -xz -C /tmp/
-    cp "/tmp/release-${FC_VERSION}-x86_64/firecracker-${FC_VERSION}-x86_64" \
+        -o "${TMPDIR_FC}/firecracker.tgz"
+    verify_sha256 "${TMPDIR_FC}/firecracker.tgz" "$FC_SHA256" "Firecracker ${FC_VERSION}"
+    tar --no-same-owner -xzf "${TMPDIR_FC}/firecracker.tgz" -C "$TMPDIR_FC"
+    cp "${TMPDIR_FC}/release-${FC_VERSION}-x86_64/firecracker-${FC_VERSION}-x86_64" \
         /usr/local/bin/firecracker
     chmod +x /usr/local/bin/firecracker
-    ok "firecracker installed"
+    rm -rf "$TMPDIR_FC"
+    trap - EXIT
+    ok "firecracker installed and verified"
 fi
 
 # ── Install Butane ────────────────────────────────────────────────────────────
 if printf '%s\n' "${MISSING_MANUAL[@]}" | grep -q '__butane__'; then
     echo ""
-    echo "=== Installing Butane ==="
+    echo "=== Installing Butane ${BUTANE_VERSION} ==="
     echo ""
     [ "$(id -u)" -eq 0 ] || { fail "Root required. Re-run with sudo."; exit 1; }
-    if [ "$BUTANE_VERSION" = "latest" ]; then
-        BUTANE_TAG="$(basename "$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
-            'https://github.com/coreos/butane/releases/latest')")"
-    else
-        BUTANE_TAG="$BUTANE_VERSION"
-    fi
+    TMPDIR_BUTANE="$(mktemp -d)"
+    trap 'rm -rf "$TMPDIR_BUTANE"' EXIT
     curl -fsSL \
-        "https://github.com/coreos/butane/releases/download/${BUTANE_TAG}/butane-x86_64-unknown-linux-gnu" \
-        -o /usr/local/bin/butane
-    chmod +x /usr/local/bin/butane
-    ok "butane installed (${BUTANE_TAG})"
+        "https://github.com/coreos/butane/releases/download/${BUTANE_VERSION}/butane-x86_64-unknown-linux-gnu" \
+        -o "${TMPDIR_BUTANE}/butane"
+    verify_sha256 "${TMPDIR_BUTANE}/butane" "$BUTANE_SHA256" "Butane ${BUTANE_VERSION}"
+    install -m 0755 "${TMPDIR_BUTANE}/butane" /usr/local/bin/butane
+    rm -rf "$TMPDIR_BUTANE"
+    trap - EXIT
+    ok "butane installed and verified (${BUTANE_VERSION})"
 fi
 
 # ── Install LOKI-RS ───────────────────────────────────────────────────────────
@@ -150,9 +184,11 @@ if printf '%s\n' "${MISSING_MANUAL[@]}" | grep -q '__loki__'; then
     [ "$(id -u)" -eq 0 ] || { fail "Root required. Re-run with sudo."; exit 1; }
     LOKI_DIR="/opt/loki-rs"
     TMPDIR_LOKI="$(mktemp -d)"
+    trap 'rm -rf "$TMPDIR_LOKI"' EXIT
     curl -fsSL \
         "https://github.com/Neo23x0/Loki-RS/releases/download/${LOKI_VERSION}/loki-linux-x86_64-${LOKI_VERSION}.tar.gz" \
         -o "${TMPDIR_LOKI}/loki.tar.gz"
+    verify_sha256 "${TMPDIR_LOKI}/loki.tar.gz" "$LOKI_SHA256" "LOKI-RS ${LOKI_VERSION}"
     tar --no-same-owner -xzf "${TMPDIR_LOKI}/loki.tar.gz" -C "$TMPDIR_LOKI"
     rm "${TMPDIR_LOKI}/loki.tar.gz"
     LOKI_BIN="$(find "$TMPDIR_LOKI" -type f -name loki | head -1)"
@@ -161,7 +197,8 @@ if printf '%s\n' "${MISSING_MANUAL[@]}" | grep -q '__loki__'; then
     chmod +x "${LOKI_DIR}/loki"
     [ -f "${LOKI_DIR}/loki-util" ] && chmod +x "${LOKI_DIR}/loki-util" || true
     rm -rf "$TMPDIR_LOKI"
-    ok "loki-rs installed"
+    trap - EXIT
+    ok "loki-rs installed and verified"
 fi
 
 # ── EFF wordlist ──────────────────────────────────────────────────────────────
