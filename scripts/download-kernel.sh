@@ -47,6 +47,11 @@ CI_VERSION="${FC_VERSION%.*}"   # v1.7.0 -> v1.7
 # original file ownership (versions.env is committed to the repo; running
 # this script as root via sudo must not chown the file to root).
 #
+# Ownership is captured by numeric UID/GID rather than names, because in
+# containers (CI, build images) the file's owner often has no matching
+# /etc/passwd entry — stat -c '%U:%G' returns "UNKNOWN:UNKNOWN" in that
+# case, which chown rejects. Numeric IDs always resolve.
+#
 # Only updates if the current on-disk value is the empty string. This is
 # deliberate: if the value is already populated and we somehow reach this
 # function, that is a logic bug, not a "should overwrite" case. The match
@@ -56,7 +61,7 @@ record_in_versions_env() {
     local KEY="$1"
     local VALUE="$2"
     local OWNER
-    OWNER="$(stat -c '%U:%G' "$VERSIONS_FILE")"
+    OWNER="$(stat -c '%u:%g' "$VERSIONS_FILE")"
     if ! grep -qE "^${KEY}=\"\"\$" "$VERSIONS_FILE"; then
         echo "[!] Refusing to overwrite ${KEY} in versions.env — value is not empty."
         echo "    To bump the recording deliberately, blank both KERNEL_RESOLVED"
