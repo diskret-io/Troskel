@@ -13,24 +13,29 @@ echo " Scanner update — $(date -u --iso-8601=seconds)"
 echo "============================================="
 echo ""
 
-echo "[1/4] Downloading ClamAV signatures..."
+echo "[1/5] Downloading ClamAV signatures..."
 bash "${SCRIPTS}/download-clamav-signatures.sh"
 echo ""
 
-echo "[2/4] Refreshing LOKI-RS YARA rules..."
+echo "[2/5] Refreshing LOKI-RS YARA rules..."
 bash "${SCRIPTS}/download-loki-yara-rules.sh"
 echo ""
 
-echo "[3/4] Downloading guest kernel..."
+echo "[3/5] Downloading guest kernel..."
 bash "${SCRIPTS}/download-kernel.sh"
 echo ""
 
-echo "[4/4] Building scanner image..."
+echo "[4/5] Building scanner image..."
 bash "${SCRIPTS}/build-scanner-image.sh"
+echo ""
+
+echo "[5/5] Generating build records (SBOM + per-build manifest)..."
+bash "${SCRIPTS}/generate-build-records.sh"
 echo ""
 
 echo "============================================="
 echo "[+] Update complete."
 echo "    Signature date : $(cat /var/lib/troskel/signature-date 2>/dev/null || echo unknown)"
 echo "    YARA rules date: $(cat /var/lib/troskel/yara-rules-date 2>/dev/null || echo unknown)"
+echo "    YARA Forge tag : $(cat /var/lib/troskel/yara-forge-resolved-tag 2>/dev/null || echo unknown)"
 echo "============================================="
