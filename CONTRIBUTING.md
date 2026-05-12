@@ -66,3 +66,38 @@ The `.gitignore` covers the main cases. As an extra reminder:
 - Build artefacts under `/var/lib/troskel/`
 - Scan logs under `/var/log/troskel/`
 - Any file containing a real password hash, key, or credential
+
+## Running the tests
+
+All test targets run inside the `troskel-build` container. The host needs only Docker installed; the container provides Debian-the-build-station with every tool already in place. See [`docs/roadmap/build-system-rationalisation.md`](docs/roadmap/build-system-rationalisation.md) for the rationale.
+
+```bash
+make image       # build (or refresh) the container image
+make validate    # static validation: butane + shellcheck. Fast (~30s).
+make test-build  # full build pipeline. Slower (~15 min); needs --privileged.
+make test-scan   # Firecracker scan tests. Needs /dev/kvm + --privileged.
+make test        # validate + test-build + test-scan in sequence.
+make clean       # remove the image and the artefact volume.
+```
+
+`make image` rebuilds the container whenever `Dockerfile` or `config/versions.env` change, so a version bump in `versions.env` picks up automatically the next time you run any test target.
+
+The Tier 2 and Tier 3 targets persist build artefacts (scanner rootfs, signatures, kernel) in a named Docker volume (`troskel-artefacts`) so `make test-scan` can consume what `make test-build` produced without rebuilding from scratch. `make clean` removes both the image and the volume.
+
+### Deprecated aliases
+
+`make build`, `make scan`, and `make all` continue to work as aliases for `make test-build`, `make test-scan`, and `make test`, with a deprecation warning printed before they run. They will be removed in a future release.
+
+### Fast-iteration loop on a single script
+
+The standard `make` targets run the full pipeline. For iterating on a single script (e.g. debugging `download-loki-yara-rules.sh`), invoke the container directly:
+
+```bash
+docker run --rm --privileged \
+    --volume "$PWD:/troskel" --workdir /troskel \
+    troskel-build bash scripts/download-loki-yara-rules.sh
+```
+
+Container start is a few seconds. The bind-mount means your edits in the host repo are immediately visible to the script inside the container — no rebuild needed.
+
+Direct host invocation of `tests/test-build.sh` or `tests/test-scan.sh` is not supported: the scripts gate on a container sentinel and refuse to run on the host. The historical host-direct path accumulated environment-dependent bugs that the containerised pipeline avoids by construction.

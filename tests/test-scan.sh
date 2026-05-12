@@ -2,7 +2,7 @@
 # tests/test-scan.sh
 # End-to-end scan tests inside the troskel-build container.
 #
-# Invocation: `make scan` (from the project root).
+# Invocation: `make test-scan` (from the project root).
 #
 # Direct host invocation is not supported — the script gates on a
 # container sentinel and refuses to run on the host. See
@@ -45,7 +45,7 @@ if [ ! -f /.troskel-container ]; then
     echo "[!] tests/test-scan.sh must run inside the troskel-build container."
     echo ""
     echo "    Supported invocation:"
-    echo "      make scan"
+    echo "      make test-scan"
     echo ""
     echo "    Fast-iteration fallback (run a single script in the container):"
     echo "      docker run --rm --privileged --device /dev/kvm \\"
@@ -71,7 +71,7 @@ cd "$PROJECT_ROOT"
 
 [ -f "${SIGDIR}/scanner-rootfs.ext4" ] && [ -f "${SIGDIR}/vmlinux" ] \
     || { echo "[!] Build artefacts missing under ${SIGDIR}."; \
-         echo "    Run: make build"; exit 1; }
+         echo "    Run: make test-build"; exit 1; }
 
 [ -f tests/files/EICAR.b64 ] \
     || { echo "[!] Missing tests/files/EICAR.b64"; exit 1; }

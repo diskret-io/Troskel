@@ -3,7 +3,7 @@
 # Runs the build pipeline end-to-end inside the troskel-build container.
 # Stops at the first failure.
 #
-# Invocation: `make build` (from the project root).
+# Invocation: `make test-build` (from the project root).
 #
 # Direct host invocation is not supported — the script gates on a
 # container sentinel and refuses to run on the host. The historical
@@ -42,7 +42,7 @@ if [ ! -f /.troskel-container ]; then
     echo "[!] tests/test-build.sh must run inside the troskel-build container."
     echo ""
     echo "    Supported invocation:"
-    echo "      make build"
+    echo "      make test-build"
     echo ""
     echo "    Fast-iteration fallback (run a single script in the container):"
     echo "      docker run --rm --privileged \\"
@@ -233,4 +233,4 @@ bash scripts/build-scanner-image.sh
 echo ""
 echo "=== Build pipeline OK ==="
 echo "Artefacts under: ${SIGDIR}"
-echo "Next: make scan  (needs /dev/kvm)"
+echo "Next: make test-scan  (needs /dev/kvm)"
