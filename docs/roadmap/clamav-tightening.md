@@ -33,9 +33,9 @@ Pure signature matching. Heuristic flags off, PUA detection off, bytecode signat
 
 ## Implementation outline
 
-1. Update the `clamscan` invocation in the embedded `run-scan.sh` (in `build-scanner-image.sh`) to enable the recommended flags above.
+1. Update the `clamscan` invocation in `guest/run-scan.sh` (the real location; an earlier draft of this doc mis-identified it as `build-scanner-image.sh`, which only installs ClamAV, it doesn't run it).
 2. Verify the per-engine summary parser still works — heuristic alerts produce output lines that may differ from the standard `path: signature FOUND` format. May need to adjust the count grep.
-3. Add a `tests/files/clamav-heuristic-test.txt` fixture: a deliberately malformed PE or encrypted ZIP that exercises the heuristic path. Confirms the new flags actually fire.
+3. Add a `tests/files/encrypted-test.zip.b64` fixture: a deliberately encrypted ZIP that exercises the `--alert-encrypted-archive` path. Confirms the new flags actually fire. A malformed-PE fixture for `--alert-broken` is a candidate follow-up.
 4. Document the false-positive rate observed in initial deployment. Consider whether any flags need to be disabled if they prove too noisy on legitimate transfers.
 5. Note in `docs/SECURITY.md` that the scanner now flags encrypted content as suspicious — operationally significant for the operator, who needs to know that "encrypted ZIP from a trusted sender" will produce a red verdict.
 
@@ -49,9 +49,10 @@ Independent of the other roadmap items. No dependencies.
 
 Target `1.0.0`. Engaging these flags is `1.0.0`-grade hardening: same engine, same scan time, broader coverage of exactly the threats a transfer scanner should catch (encrypted archives, malformed PEs, dual-use tools). Shipping `1.0.0` while ClamAV runs in signature-only mode would mean leaving free detection capability on the table.
 
-Should land alongside `improved-verdict-output.md`. The new `--alert-encrypted` and `--alert-broken` flags will produce visible behavioural change — legitimate password-protected archives and structurally unusual PEs that previously passed as green will now go red. Operators need to see *what* was flagged, not just the verdict, or the change is frustrating rather than informative. The two changes are individually small but coupled in operator experience.
+The new `--alert-encrypted` and `--alert-broken` flags will produce visible behavioural change — legitimate password-protected archives and structurally unusual PEs that previously passed as green will now go red. The verdict-display refactor needed to make this behavioural change usable for operators (showing flagged filenames on screen rather than requiring a `grep` command) has already landed in `main`, so operators will see *what* was flagged when the new flags fire.
 
 ## Open questions
 
 - Should encrypted-content alerts be a separate verdict tier (yellow) rather than red? Treating them as threats is the conservative default but may produce too many false-positive reds on legitimate password-protected archives.
 - Should bytecode signatures be explicitly enabled, or is the default behaviour sufficient? Worth reading the ClamAV bytecode documentation before deciding.
+- Should `--detect-pua` be enabled? Brings false positives on legitimate dual-use tools. The current decision is to leave it disabled in the initial clamav-tightening commit and revisit post-`1.0.0` with operator feedback. Discussed further in the commit message of that work.

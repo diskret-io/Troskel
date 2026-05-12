@@ -166,7 +166,7 @@ A few download scripts need small changes to capture state the generator will re
 
 - `download-loki-yara-rules.sh` already logs the YARA Forge archive SHA-256 to stdout. The generator needs a more durable home for it — write it to `/var/lib/troskel/yara-forge-archive-sha256` at download time.
 - `download-clamav-signatures.sh` already runs after `freshclam`; the `.cvd` files are on disk by the time the generator runs, so no script change is needed — the generator just reads them.
-- `download-kernel.sh` (modified in phase B of checksum-verification) already writes `KERNEL_SHA256` to `versions.env`. The generator reads from `versions.env`, so no further change is needed.
+- `download-kernel.sh` already writes `KERNEL_RESOLVED` and `KERNEL_SHA256` to `versions.env` (via the record-at-first-download work that landed earlier). The generator reads from `versions.env`, so no further change is needed.
 - A new tiny capture step is needed for the YARA Forge resolved tag: either at download time in `download-loki-yara-rules.sh` (write to `/var/lib/troskel/yara-forge-resolved-tag`), or at manifest-generation time (resolve again via HEAD; less reliable because the upstream may have rotated `latest` between download and manifest generation). At-download-time is the right answer.
 
 ### Propagation to the scanning host
@@ -196,7 +196,7 @@ One and a half days. The generator itself is the largest piece (around half a da
 
 ## Sequencing
 
-Depends on `checksum-verification.md` phase A being complete (the recorded SHA-256s the manifest emits are introduced there) and on phase B for the kernel hash. Phase A is in; phase B is in flight.
+Reads from values that the upstream-artefact integrity verification work (formerly tracked as `checksum-verification.md`, now in `main`) put in place: the recorded SHA-256s the manifest emits, and the resolved kernel filename and hash. That work has landed, so no external dependency remains.
 
 Closely coupled with `sbom-automation.md` — both are produced by the same generator. Land them in the same commit, with the shared generator and both output paths.
 

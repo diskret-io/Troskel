@@ -77,15 +77,11 @@ At least one engine flagged at least one file. The per-engine breakdown under th
   LOKI-RS  : clean
 ```
 
+Below the breakdown, the screen lists the specific files that were flagged together with the rule or signature name that flagged each one. The list is truncated at 20 items if a scan produced many findings; the full log path is shown beneath it for the admin's reference.
+
 Do not transfer any files from the file USB, not just the flagged ones. A file USB on which any item flagged is treated as untrusted in its entirety.
 
-For the details of what was flagged:
-
-```bash
-grep -E 'FOUND$|"level":"ALERT"' /var/log/troskel/scan-*.log
-```
-
-ClamAV's `FOUND` lines and LOKI-RS's JSONL `ALERT` records are the authoritative finding details. Note that the log lives in tmpfs and will be lost when you power off — if the admin needs the log, photograph the screen before powering off.
+The scan log lives in tmpfs and will be lost when you power off — if the admin needs the log, photograph the screen before powering off.
 
 ### Yellow — `*** RESULT UNCLEAR — Contact admin ***`
 

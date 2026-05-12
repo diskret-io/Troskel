@@ -141,9 +141,9 @@ Two to three days:
 
 ## Sequencing
 
-Depends on `improved-verdict-output.md` being done first — the verdict display refactor touches the same end-of-scan section of `scan-wrap` and the two tasks conflict if done simultaneously.
+No outstanding dependencies. The two earlier roadmap items this work would have interacted with — the verdict-display refactor (formerly tracked as `improved-verdict-output.md`) and the upstream-artefact integrity verification (formerly `checksum-verification.md`) — have both landed in `main`. The end-of-scan section of `scan-wrap` is now in the shape this work expects to extend, and the per-build provenance fields that the certificate references (signature dates, resolved upstream versions) are already recorded in `versions.env` and on the data USB.
 
-Does not depend on the parallel engines or capa tasks. Independent of `checksum-verification.md`.
+Does not depend on the parallel engines or capa tasks.
 
 Target `1.1.0`. Does not block `1.0.0`.
 
