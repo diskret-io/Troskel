@@ -2,9 +2,9 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
   "version": 1,
-  "serialNumber": "urn:uuid:3e671687-395b-41f5-a30f-a58921a69b79",
+  "serialNumber": "urn:uuid:4f782798-4a6c-52f6-b41f-b69032b7ac8a",
   "metadata": {
-    "timestamp": "2026-05-07T13:06:50Z",
+    "timestamp": "2026-05-12T00:00:00Z",
     "tools": {
       "components": [
         {
@@ -12,7 +12,7 @@
           "name": "troskel-sbom-generator",
           "version": "1.0.0",
           "vendor": "troskel-project",
-          "description": "SBOM generation for Troskelproject"
+          "description": "SBOM generation for Troskel project. Currently hand-maintained; automation tracked in docs/roadmap/sbom-automation.md."
         }
       ]
     },
@@ -20,7 +20,7 @@
       "type": "application",
       "name": "troskel",
       "version": "1.0.0",
-      "description": "Air-Gapped file-crossing scanner",
+      "description": "Air-gapped file-crossing scanner",
       "supplier": {
         "name": "Diskret Team"
       },
@@ -56,8 +56,8 @@
     {
       "type": "operating-system",
       "name": "fedora-coreos",
-      "version": "1.5.0",
-      "description": "CoreOS variant for scanning host",
+      "version": "stable-stream",
+      "description": "CoreOS variant for scanning host. Tracks the 'stable' stream; the resolved version at build time is captured in the per-build manifest. ISO verified by coreos-installer against the Fedora signing key.",
       "supplier": {
         "name": "Fedora Project"
       },
@@ -68,7 +68,7 @@
           }
         }
       ],
-      "purl": "pkg:generic/fedora-coreos@1.5.0",
+      "purl": "pkg:generic/fedora-coreos@stable",
       "externalReferences": [
         {
           "url": "https://fedoraproject.org/coreos",
@@ -83,6 +83,14 @@
         {
           "name": "boot-mode",
           "value": "live-ram"
+        },
+        {
+          "name": "verification-method",
+          "value": "upstream-signed"
+        },
+        {
+          "name": "pin-category",
+          "value": "FLOATING"
         }
       ]
     },
@@ -90,7 +98,7 @@
       "type": "container",
       "name": "coreos-installer",
       "version": "release",
-      "description": "CoreOS installation tool",
+      "description": "CoreOS installation tool. Tracks the 'release' tag; pinning by digest is tracked as planned hardening.",
       "supplier": {
         "name": "Fedora Project"
       },
@@ -107,12 +115,22 @@
           "url": "https://quay.io/coreos/coreos-installer",
           "type": "registry"
         }
+      ],
+      "properties": [
+        {
+          "name": "verification-method",
+          "value": "tls-only"
+        },
+        {
+          "name": "pin-category",
+          "value": "FLOATING"
+        }
       ]
     },
     {
       "type": "library",
       "name": "firecracker",
-      "version": "1.7.0",
+      "version": "v1.7.0",
       "description": "MicroVM hypervisor for isolated scanning",
       "supplier": {
         "name": "Amazon Web Services"
@@ -124,7 +142,7 @@
           }
         }
       ],
-      "purl": "pkg:github/firecracker-microvm/firecracker@1.7.0",
+      "purl": "pkg:github/firecracker-microvm/firecracker@v1.7.0",
       "externalReferences": [
         {
           "url": "https://github.com/firecracker-microvm/firecracker",
@@ -135,6 +153,12 @@
           "type": "documentation"
         }
       ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "55bd3e6d599fdd108e36e52f9aee2319f06c18a90f2fa49b64e93fdf06f5ff53"
+        }
+      ],
       "properties": [
         {
           "name": "security-role",
@@ -143,14 +167,22 @@
         {
           "name": "attack-surface",
           "value": "minimal"
+        },
+        {
+          "name": "verification-method",
+          "value": "sidecar"
+        },
+        {
+          "name": "pin-category",
+          "value": "PINNED"
         }
       ]
     },
     {
       "type": "library",
       "name": "clamav",
-      "version": "latest",
-      "description": "Signature-based antivirus engine",
+      "version": "trixie-default",
+      "description": "Signature-based antivirus engine. Installed via debootstrap from the pinned Debian release; exact package version is determined by the Debian release pin.",
       "supplier": {
         "name": "ClamAV Team"
       },
@@ -161,7 +193,7 @@
           }
         }
       ],
-      "purl": "pkg:debian/clamav@latest",
+      "purl": "pkg:debian/clamav@trixie",
       "externalReferences": [
         {
           "url": "https://www.clamav.net",
@@ -176,6 +208,14 @@
         {
           "name": "coverage",
           "value": "commodity-malware"
+        },
+        {
+          "name": "verification-method",
+          "value": "apt-via-debian-release"
+        },
+        {
+          "name": "pin-category",
+          "value": "DERIVED"
         }
       ]
     },
@@ -183,7 +223,7 @@
       "type": "file",
       "name": "clamav-signatures",
       "version": "dynamic",
-      "description": "ClamAV signature database (updated regularly)",
+      "description": "ClamAV signature database. Updated regularly by freshclam; resolved .cvd version numbers and hashes captured in the per-build manifest.",
       "supplier": {
         "name": "ClamAV Team"
       },
@@ -203,6 +243,14 @@
         {
           "name": "freshness-gate",
           "value": "30-days"
+        },
+        {
+          "name": "verification-method",
+          "value": "freshclam-embedded-keys"
+        },
+        {
+          "name": "pin-category",
+          "value": "FLOATING"
         }
       ]
     },
@@ -242,13 +290,21 @@
         {
           "name": "vendored-via",
           "value": "scripts/download-wordlist.sh"
+        },
+        {
+          "name": "verification-method",
+          "value": "recorded"
+        },
+        {
+          "name": "pin-category",
+          "value": "PINNED"
         }
       ]
     },
     {
       "type": "library",
       "name": "loki-rs",
-      "version": "2.10.0",
+      "version": "v2.10.0",
       "description": "YARA-rule and IOC scanner",
       "supplier": {
         "name": "Neo23x0"
@@ -260,11 +316,17 @@
           }
         }
       ],
-      "purl": "pkg:github/Neo23x0/Loki-RS@2.10.0",
+      "purl": "pkg:github/Neo23x0/Loki-RS@v2.10.0",
       "externalReferences": [
         {
           "url": "https://github.com/Neo23x0/Loki-RS",
           "type": "website"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "71ff1643736a05adbb37520fc05fdb9710ef4f972dad68d67caf2b98ac69dade"
         }
       ],
       "properties": [
@@ -275,6 +337,14 @@
         {
           "name": "coverage",
           "value": "apt-artifacts,hack-tools,web-shells"
+        },
+        {
+          "name": "verification-method",
+          "value": "sidecar"
+        },
+        {
+          "name": "pin-category",
+          "value": "PINNED"
         }
       ]
     },
@@ -282,19 +352,66 @@
       "type": "file",
       "name": "yara-forge-core-rules",
       "version": "dynamic",
-      "description": "YARA Forge Core rule set for LOKI-RS",
+      "description": "YARA Forge Core rule set for LOKI-RS. Floats with weekly upstream releases; the resolved release tag and archive SHA-256 are captured in the per-build manifest.",
       "supplier": {
         "name": "YARA Forge"
       },
       "purl": "pkg:generic/yara-forge-core@dynamic",
+      "externalReferences": [
+        {
+          "url": "https://github.com/YARAHQ/yara-forge",
+          "type": "website"
+        }
+      ],
       "properties": [
         {
           "name": "update-method",
-          "value": "loki-util-update"
+          "value": "scripts/download-loki-yara-rules.sh"
         },
         {
           "name": "curated",
           "value": "true"
+        },
+        {
+          "name": "verification-method",
+          "value": "tls-only"
+        },
+        {
+          "name": "pin-category",
+          "value": "FLOATING"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "name": "loki-ioc-base",
+      "version": "v2.0",
+      "description": "IOC inputs (hash, filename, c2) used by LOKI-RS. Supplied upstream by github.com/Neo23x0/signature-base; pinned to an immutable release tag.",
+      "supplier": {
+        "name": "Neo23x0"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "CC-BY-NC-4.0"
+          }
+        }
+      ],
+      "purl": "pkg:github/Neo23x0/signature-base@v2.0",
+      "externalReferences": [
+        {
+          "url": "https://github.com/Neo23x0/signature-base",
+          "type": "website"
+        }
+      ],
+      "properties": [
+        {
+          "name": "verification-method",
+          "value": "tag-pinning"
+        },
+        {
+          "name": "pin-category",
+          "value": "PINNED-TAG"
         }
       ]
     },
@@ -328,13 +445,21 @@
         {
           "name": "variant",
           "value": "minbase"
+        },
+        {
+          "name": "verification-method",
+          "value": "debootstrap-via-apt-keys"
+        },
+        {
+          "name": "pin-category",
+          "value": "PINNED"
         }
       ]
     },
     {
       "type": "library",
       "name": "butane",
-      "version": "latest",
+      "version": "v0.27.0",
       "description": "CoreOS Butane config compiler (Butane to Ignition)",
       "supplier": {
         "name": "Fedora Project"
@@ -346,19 +471,35 @@
           }
         }
       ],
-      "purl": "pkg:github/coreos/butane@latest",
+      "purl": "pkg:github/coreos/butane@v0.27.0",
       "externalReferences": [
         {
           "url": "https://github.com/coreos/butane",
           "type": "website"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "4691b2618e94e67bb5ad2d8954bb2a414f670b83e8a39b76faae42f3c1a879fe"
+        }
+      ],
+      "properties": [
+        {
+          "name": "verification-method",
+          "value": "gpg-bootstrap"
+        },
+        {
+          "name": "pin-category",
+          "value": "PINNED"
         }
       ]
     },
     {
       "type": "library",
       "name": "busybox",
-      "version": "latest",
-      "description": "Minimal Unix utilities for guest",
+      "version": "trixie-default",
+      "description": "Minimal Unix utilities for guest. Installed via debootstrap from the pinned Debian release.",
       "supplier": {
         "name": "BusyBox Team"
       },
@@ -369,19 +510,27 @@
           }
         }
       ],
-      "purl": "pkg:debian/busybox@latest",
+      "purl": "pkg:debian/busybox@trixie",
       "properties": [
         {
           "name": "variant",
           "value": "static"
+        },
+        {
+          "name": "verification-method",
+          "value": "apt-via-debian-release"
+        },
+        {
+          "name": "pin-category",
+          "value": "DERIVED"
         }
       ]
     },
     {
       "type": "firmware",
       "name": "vmlinux",
-      "version": "1.7.x",
-      "description": "Firecracker-compatible guest kernel",
+      "version": "record-at-first-download",
+      "description": "Firecracker-compatible guest kernel. Pinned to the resolved filename within the FC_VERSION CI series via the record-at-first-download pattern; KERNEL_RESOLVED and KERNEL_SHA256 in versions.env carry the recorded values.",
       "supplier": {
         "name": "AWS Firecracker"
       },
@@ -392,7 +541,7 @@
           }
         }
       ],
-      "purl": "pkg:generic/firecracker-vmlinux@1.7.x",
+      "purl": "pkg:generic/firecracker-vmlinux@v1.7",
       "externalReferences": [
         {
           "url": "https://github.com/firecracker-microvm/firecracker",
@@ -407,14 +556,22 @@
         {
           "name": "interface",
           "value": "virtio-mmio"
+        },
+        {
+          "name": "verification-method",
+          "value": "record-at-first-download"
+        },
+        {
+          "name": "pin-category",
+          "value": "DERIVED"
         }
       ]
     },
     {
       "type": "application",
       "name": "debootstrap",
-      "version": "latest",
-      "description": "Debian system bootstrap tool",
+      "version": "host-system",
+      "description": "Debian system bootstrap tool. Provided by the build station's package manager; version determined by the build host.",
       "supplier": {
         "name": "Debian Project"
       },
@@ -425,13 +582,19 @@
           }
         }
       ],
-      "purl": "pkg:debian/debootstrap@latest"
+      "purl": "pkg:debian/debootstrap",
+      "properties": [
+        {
+          "name": "verification-method",
+          "value": "host-package-manager"
+        }
+      ]
     },
     {
       "type": "application",
       "name": "e2fsprogs",
-      "version": "latest",
-      "description": "Ext4 filesystem tools",
+      "version": "host-system",
+      "description": "Ext4 filesystem tools. Provided by the build station's package manager.",
       "supplier": {
         "name": "Ext4 Team"
       },
@@ -442,13 +605,19 @@
           }
         }
       ],
-      "purl": "pkg:debian/e2fsprogs@latest"
+      "purl": "pkg:debian/e2fsprogs",
+      "properties": [
+        {
+          "name": "verification-method",
+          "value": "host-package-manager"
+        }
+      ]
     },
     {
       "type": "application",
       "name": "zincati",
-      "version": "latest",
-      "description": "CoreOS auto-update daemon (disabled in production)",
+      "version": "trixie-default",
+      "description": "CoreOS auto-update daemon (masked and disabled in production)",
       "supplier": {
         "name": "Fedora Project"
       },
@@ -459,11 +628,19 @@
           }
         }
       ],
-      "purl": "pkg:generic/zincati@latest",
+      "purl": "pkg:generic/zincati@trixie",
       "properties": [
         {
           "name": "production-status",
           "value": "masked-disabled"
+        },
+        {
+          "name": "verification-method",
+          "value": "upstream-signed"
+        },
+        {
+          "name": "pin-category",
+          "value": "DERIVED"
         }
       ]
     }
@@ -472,37 +649,38 @@
     {
       "ref": "pkg:generic/troskel@1.0.0",
       "dependsOn": [
-        "pkg:generic/fedora-coreos@1.5.0",
-        "pkg:github/firecracker-microvm/firecracker@1.7.0",
-        "pkg:debian/clamav@latest",
-        "pkg:github/Neo23x0/Loki-RS@2.10.0",
+        "pkg:generic/fedora-coreos@stable",
+        "pkg:github/firecracker-microvm/firecracker@v1.7.0",
+        "pkg:debian/clamav@trixie",
+        "pkg:github/Neo23x0/Loki-RS@v2.10.0",
         "pkg:generic/debian@trixie"
       ]
     },
     {
-      "ref": "pkg:github/firecracker-microvm/firecracker@1.7.0",
+      "ref": "pkg:github/firecracker-microvm/firecracker@v1.7.0",
       "dependsOn": [
-        "pkg:generic/firecracker-vmlinux@1.7.x"
+        "pkg:generic/firecracker-vmlinux@v1.7"
       ]
     },
     {
-      "ref": "pkg:debian/clamav@latest",
+      "ref": "pkg:debian/clamav@trixie",
       "dependsOn": [
         "pkg:generic/clamav-signatures@dynamic"
       ]
     },
     {
-      "ref": "pkg:github/Neo23x0/Loki-RS@2.10.0",
+      "ref": "pkg:github/Neo23x0/Loki-RS@v2.10.0",
       "dependsOn": [
-        "pkg:generic/yara-forge-core@dynamic"
+        "pkg:generic/yara-forge-core@dynamic",
+        "pkg:github/Neo23x0/signature-base@v2.0"
       ]
     },
     {
-      "ref": "pkg:generic/fedora-coreos@1.5.0",
+      "ref": "pkg:generic/fedora-coreos@stable",
       "dependsOn": [
-        "pkg:github/coreos/butane@latest",
+        "pkg:github/coreos/butane@v0.27.0",
         "pkg:generic/coreos-installer@release",
-        "pkg:generic/zincati@latest"
+        "pkg:generic/zincati@trixie"
       ]
     }
   ],
@@ -513,7 +691,7 @@
       "assemblies": [
         "pkg:generic/troskel@1.0.0"
       ],
-      "note": "SBOM generated from project documentation; some dynamic components (signatures, rules) updated regularly"
+      "note": "SBOM hand-maintained; automation tracked in docs/roadmap/sbom-automation.md. Per-build resolved versions for dynamic components (signatures, YARA rules, kernel filename, CoreOS stream) are captured in the per-build manifest (planned, see docs/roadmap/build-manifest.md), not in this SBOM."
     }
   ],
   "annotations": [
@@ -524,8 +702,8 @@
           "name": "troskel-project"
         }
       },
-      "timestamp": "2026-05-07T13:06:50Z",
-      "annotation": "SBOM reflects air-gapped file scanner architecture with multi-engine detection (ClamAV + LOKI-RS) running in sandbox (Firecracker) microVM"
+      "timestamp": "2026-05-12T00:00:00Z",
+      "annotation": "Air-gapped file scanner with multi-engine detection (ClamAV + LOKI-RS) running in Firecracker microVM. All software components are integrity-verified at download; verification methods per component are recorded in the verification-method property."
     }
   ],
   "properties": [
@@ -550,8 +728,12 @@
       "value": "none"
     },
     {
-      "name": "signature-freshness-gate",
+      "name": "signature-freshness-gate-clamav",
       "value": "30-days"
+    },
+    {
+      "name": "signature-freshness-gate-yara",
+      "value": "60-days"
     }
   ]
 }
