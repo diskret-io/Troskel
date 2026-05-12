@@ -3,28 +3,32 @@
 # do not need to remember --privileged / --device /dev/kvm incantations.
 #
 # Targets:
-#   make image      Build the troskel-build container image.
-#   make validate   Tier 1: Butane + shellcheck. No privileges.
-#   make build      Tier 2: Full image build (debootstrap etc). Needs --privileged.
-#   make scan       Tier 3: Firecracker scan test. Needs --privileged + /dev/kvm.
-#   make all        Tiers 1, 2, and 3 in sequence.
-#   make clean      Remove the container image and build artefact volume.
+#   make image       Build the troskel-build container image.
+#   make validate    Tier 1: Butane + shellcheck. No privileges.
+#   make test-build  Tier 2: Full build pipeline. Needs --privileged.
+#   make test-scan   Tier 3: Firecracker scan test. Needs --privileged + /dev/kvm.
+#   make test        Validate + test-build + test-scan in sequence.
+#   make clean       Remove the container image and build artefact volume.
+#
+# Deprecated aliases (will be removed in a future release):
+#   make build       -> make test-build
+#   make scan        -> make test-scan
+#   make all         -> make test
 #
 # Runtime:
-#   Docker is preferred; Podman is the fallback. Detected automatically.
-#   Docker and Podman require slightly different flags for privileged containers;
-#   the Makefile detects which is in use and sets flags accordingly.
+#   Docker is required.
 #
 # Privileges:
-#   Tier 2 (build) needs --privileged for debootstrap and mkfs.ext4.
-#   Tier 3 (scan)  needs --privileged and /dev/kvm for Firecracker.
-#   With Docker:   runs as root via the daemon — no extra flags needed.
-
+#   Tier 2 (test-build) needs --privileged for debootstrap and mkfs.ext4.
+#   Tier 3 (test-scan)  needs --privileged and /dev/kvm for Firecracker.
+#   Docker runs containers as root via its daemon — plain --privileged is
+#   sufficient.
 #
 # Artefact persistence:
 #   Build artefacts (rootfs, signatures, kernel) are stored in a named
-#   volume (troskel-artefacts) so they persist between make build and
-#   make scan. make clean removes the volume along with the image.
+#   volume (troskel-artefacts) so they persist between make test-build
+#   and make test-scan. make clean removes the volume along with the
+#   image.
 
 IMAGE_NAME   := troskel-build
 VOLUME_NAME  := troskel-artefacts
@@ -58,7 +62,8 @@ RUN_BASE           := $(RUNTIME) $(RUN_FLAGS_BASE) $(IMAGE_NAME)
 RUN_PRIVILEGED     := $(RUNTIME) $(RUN_FLAGS_BASE) $(PRIV_FLAGS) $(IMAGE_NAME)
 RUN_PRIVILEGED_KVM := $(RUNTIME) $(RUN_FLAGS_BASE) $(PRIV_FLAGS) --device /dev/kvm $(IMAGE_NAME)
 
-.PHONY: image validate build scan all clean check-kvm check-priv
+.PHONY: image validate test-build test-scan test clean check-kvm check-priv \
+        build scan all
 
 # Internal target: verify /dev/kvm is present before starting a scan.
 check-kvm:
@@ -102,18 +107,47 @@ validate: image
 	$(RUN_BASE) bash tests/test-validate.sh
 
 ## Tier 2 — Full build pipeline (debootstrap, image build). Needs --privileged.
-build: image check-priv
+test-build: image check-priv
 	$(RUNTIME) volume create $(VOLUME_NAME) 2>/dev/null || true
 	$(RUN_PRIVILEGED) bash tests/test-build.sh
 
 ## Tier 3 — Firecracker scan test. Needs --privileged + /dev/kvm.
-scan: image check-kvm check-priv
+test-scan: image check-kvm check-priv
 	$(RUN_PRIVILEGED_KVM) bash tests/test-scan.sh
 
-## Run all tiers in sequence.
-all: validate build scan
+## Run validate, test-build, and test-scan in sequence.
+test: validate test-build test-scan
 
 ## Remove the container image and the build artefact volume.
 clean:
 	$(RUNTIME) rmi $(IMAGE_NAME) 2>/dev/null || true
 	$(RUNTIME) volume rm $(VOLUME_NAME) 2>/dev/null || true
+
+# ── Deprecated aliases ────────────────────────────────────────────────────────
+# `make build`, `make scan`, and `make all` were renamed to make the test-
+# vs deliverable-producing distinction explicit. The old names continue
+# to work for one release with a deprecation warning, then will be
+# removed. See docs/roadmap/build-system-rationalisation.md.
+#
+# The warning is printed BEFORE the real target runs so the developer
+# sees it first in the output rather than after a five-minute build.
+build:
+	@echo ""
+	@echo "[!] 'make build' is deprecated; use 'make test-build' instead."
+	@echo "    The old name will be removed in a future release."
+	@echo ""
+	@$(MAKE) --no-print-directory test-build
+
+scan:
+	@echo ""
+	@echo "[!] 'make scan' is deprecated; use 'make test-scan' instead."
+	@echo "    The old name will be removed in a future release."
+	@echo ""
+	@$(MAKE) --no-print-directory test-scan
+
+all:
+	@echo ""
+	@echo "[!] 'make all' is deprecated; use 'make test' instead."
+	@echo "    The old name will be removed in a future release."
+	@echo ""
+	@$(MAKE) --no-print-directory test

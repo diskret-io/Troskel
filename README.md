@@ -98,12 +98,14 @@ sudo bash scripts/prepare-build-machine.sh
 The `make` targets run everything inside Docker — the same container image used by the admin workflow. Docker is the only host dependency.
 
 ```bash
-make image      # build the troskel-build container image (~5 min first time)
-make validate   # Tier 1: Butane config + shellcheck (~30 sec, no privileges)
-make build      # Tier 2: full image build — debootstrap, signatures (~15 min)
-make scan       # Tier 3: Firecracker scan test — needs /dev/kvm (~5 min)
-make all        # run all three tiers in sequence
+make image       # build the troskel-build container image (~5 min first time)
+make validate    # Tier 1: Butane config + shellcheck (~30 sec, no privileges)
+make test-build  # Tier 2: full build pipeline — debootstrap, signatures (~15 min)
+make test-scan   # Tier 3: Firecracker scan test — needs /dev/kvm (~5 min)
+make test        # run validate + test-build + test-scan in sequence
 ```
+
+`make build`, `make scan`, and `make all` continue to work as deprecated aliases for one release; they print a warning and run the renamed target. They will be removed in a future release.
 
 See [`tests/README.md`](tests/README.md) for more detail.
 
@@ -138,8 +140,8 @@ scripts/                 Build station scripts
 
 tests/
   test-validate.sh       Tier 1: static validation (no privileges)
-  test-build.sh          Tier 2: build pipeline
-  test-scan.sh           Tier 3: Firecracker scan
+  test-build.sh          Tier 2: build pipeline (containerised, runs via `make test-build`)
+  test-scan.sh           Tier 3: Firecracker scan (containerised, runs via `make test-scan`)
   manual-tests-scan.md   Manual test procedures (yellow path, cleanup, etc.)
 
 docs/
