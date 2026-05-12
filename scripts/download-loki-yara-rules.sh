@@ -15,9 +15,11 @@
 #     Forge is a DETECTION input (see config/versions.env), not a
 #     SOFTWARE component: the operational requirement is reproducibility
 #     of a given build, not protection against upstream substitution.
-#     The downloaded archive's hash is recorded in the per-build
-#     manifest (planned — see docs/SECURITY.md), so that a scan can be
-#     reproduced later against the same byte-exact rule set.
+#     The downloaded archive's hash and the resolved release tag are
+#     written to durable files under /var/lib/troskel/ for the
+#     build-records generator to consume; together they let a future
+#     reader say precisely "this scan used YARA Forge release T with
+#     archive SHA-256 H".
 #   - The IOC base (signature-base upstream) is fetched from a tagged
 #     release (pinned in versions.env as LOKI_IOC_BASE_VERSION), not
 #     from the rolling master branch. The tag is immutable on the
@@ -40,13 +42,39 @@ TMPDIR_RULES="$(mktemp -d)"
 cleanup() { rm -rf "$TMPDIR_RULES"; }
 trap cleanup EXIT
 
+mkdir -p "$SIGDIR"
+
 # ── YARA Forge ────────────────────────────────────────────────────────────────
 
 # YARA Forge publishes weekly releases. The `latest` redirect resolves
-# to the most recent release automatically.
-YARA_FORGE_BASE="https://github.com/YARAHQ/yara-forge/releases/latest/download"
+# to the most recent release. We resolve the tag *before* downloading so
+# that the resolved value matches what we actually fetch (and so that
+# the manifest can record "this build used release T", not "this build
+# used whatever latest resolved to roughly around then").
+#
+# The redirect target looks like:
+#   https://github.com/YARAHQ/yara-forge/releases/tag/20260510
+# We extract the trailing path component as the resolved tag.
+YARA_FORGE_LATEST_URL="https://github.com/YARAHQ/yara-forge/releases/latest"
+
+echo "[*] Resolving YARA Forge latest release tag..."
+YARA_FORGE_REDIRECT="$(curl -sI -o /dev/null -w '%{redirect_url}' "$YARA_FORGE_LATEST_URL" \
+    || { echo "[!] HEAD request to YARA Forge latest failed."; exit 1; })"
+YARA_FORGE_TAG="${YARA_FORGE_REDIRECT##*/tag/}"
+# Sanity: if the redirect URL doesn't have a /tag/ component, ${##*/tag/}
+# returns the entire redirect URL. Detect this and bail.
+case "$YARA_FORGE_TAG" in
+    https://*|"")
+        echo "[!] Could not resolve YARA Forge release tag from redirect: ${YARA_FORGE_REDIRECT}"
+        exit 1
+        ;;
+esac
+echo "[+] YARA Forge release tag: ${YARA_FORGE_TAG}"
+
+# Now download the archive from the resolved tag rather than from /latest/,
+# so there is no race between resolution and download.
 YARA_FORGE_ZIP="yara-forge-rules-core.zip"
-YARA_FORGE_URL="${YARA_FORGE_BASE}/${YARA_FORGE_ZIP}"
+YARA_FORGE_URL="https://github.com/YARAHQ/yara-forge/releases/download/${YARA_FORGE_TAG}/${YARA_FORGE_ZIP}"
 
 echo "[*] Downloading YARA Forge Core rules..."
 curl -fsSL --location "$YARA_FORGE_URL" \
@@ -55,11 +83,16 @@ curl -fsSL --location "$YARA_FORGE_URL" \
 
 # Record the SHA-256 of what we downloaded. This is a receipt, not a
 # verification: there is no upstream-published value to compare against.
-# The hash exists so it can be propagated into the per-build manifest
-# for reproducibility. For now, log it visibly so it is captured in
-# whatever build log the operator keeps.
+# Written to a durable file so the build-records generator can read it.
 YARA_FORGE_DOWNLOADED_SHA="$(sha256sum "${TMPDIR_RULES}/${YARA_FORGE_ZIP}" | awk '{print $1}')"
 echo "[i] YARA Forge archive SHA-256: ${YARA_FORGE_DOWNLOADED_SHA}"
+
+# Durable artefacts for the generator. Written atomically via tmp+mv so
+# a script interruption can't leave half-written values around.
+echo "$YARA_FORGE_TAG" > "${SIGDIR}/yara-forge-resolved-tag.new"
+mv "${SIGDIR}/yara-forge-resolved-tag.new" "${SIGDIR}/yara-forge-resolved-tag"
+echo "$YARA_FORGE_DOWNLOADED_SHA" > "${SIGDIR}/yara-forge-archive-sha256.new"
+mv "${SIGDIR}/yara-forge-archive-sha256.new" "${SIGDIR}/yara-forge-archive-sha256"
 
 echo "[*] Extracting rules..."
 unzip -q "${TMPDIR_RULES}/${YARA_FORGE_ZIP}" \
