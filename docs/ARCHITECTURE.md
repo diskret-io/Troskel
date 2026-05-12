@@ -117,10 +117,12 @@ Two files govern all tunables:
 
 | File                  | Purpose                                                         | Used by                                                  |
 |-----------------------|-----------------------------------------------------------------|----------------------------------------------------------|
-| `config/versions.env` | Upstream component versions                                     | Build station scripts only                               |
+| `config/versions.env` | Upstream component versions and recorded SHA-256s               | Build station scripts only                               |
 | `config/scanner.env`  | Operational policy (freshness thresholds, VM sizing, file caps) | Build station + propagated to scanning host via data USB |
 
 `scanner.env` travels to the scanning host on the data USB and is copied to `/var/lib/troskel/scanner.env` by `load-scanner` at boot. `check-system-ready` and `scan-wrap` source it at runtime. Admins adjust policy by editing `scanner.env` and running `troskel-build.sh --update` to write a fresh data USB.
+
+`versions.env` is build-station-only. It carries pinned versions for software components (Firecracker, Butane, LOKI-RS, kernel, wordlist) alongside their recorded SHA-256s, and pinned tags for detection inputs that publish them (LOKI IOC base). Every artefact the build station downloads is integrity-verified against the values recorded here; see `SECURITY.md` for the verification taxonomy.
 
 ---
 
@@ -134,6 +136,6 @@ Bookworm was the initial candidate but ships glibc 2.36, which is below the 2.39
 
 - **Novel malware with no signature.** Green means no engine matched any known signature — not guaranteed clean.
 - **BadUSB / HID injection.** A malicious USB presenting as a keyboard could type commands. Physical control of the scanning room and operator training are the mitigations.
-- **Compromised upstream artefacts.** Downloads are TLS-verified but not yet checksum-verified against published sidecars. See `docs/roadmap/checksum-verification.md`.
+- **Supply-chain compromise at the source.** Software components are integrity-verified at download (see SECURITY.md), which catches transit-level tampering and CDN corruption. An attacker who controls a signing key, or who can substitute artefacts on a CDN that publishes its own sidecars, defeats the verification at the source — no client-side mechanism can detect that.
 
 See [`docs/SECURITY.md`](SECURITY.md) for the full threat model and residual risk register.
