@@ -26,9 +26,10 @@ log() { echo "[$(date -u +%H:%M:%S)] $*" > "$SERIAL"; }
 # Load engine config injected by build-scanner-image.sh.
 # shellcheck source=/dev/null
 [ -f /etc/troskel-engine.env ] && . /etc/troskel-engine.env
-# Fallback: match the scanner.env default so the guest is safe even if
+# Fallbacks: match the scanner.env defaults so the guest is safe even if
 # the config file is absent (e.g. during a manual rootfs test).
 LOKI_MAX_FILE_SIZE="${LOKI_MAX_FILE_SIZE:-4294967296}"
+CLAM_MAX_FILE_SIZE="${CLAM_MAX_FILE_SIZE:-4294967296}"
 
 # count_lines — robust replacement for `grep -c PAT FILE || echo 0`. The
 # `grep -c` form prints "0" on no match AND exits non-zero, so paired
@@ -50,25 +51,84 @@ mount -o ro /dev/vdb "$SCANDIR" \
 # afterwards for the per-engine summary line. With --infected, ClamAV
 # prints one line per infected file: "<path>: <signature> FOUND".
 #
-# --quiet was previously included here but has been removed: in current
-# ClamAV versions it suppresses the per-file FOUND lines that --infected
-# would otherwise emit, leaving only the (also-suppressed) summary. The
-# resulting empty output broke the count parser. We now accept the more
-# verbose summary in exchange for reliably-captured FOUND lines.
+# Flags chosen for an air-gap transfer scanner:
+#   --recursive               : walk into subdirectories.
+#   --infected                : emit one "FOUND" line per finding; suppress
+#                               per-file scan summaries. The count parser
+#                               greps the "FOUND" suffix.
+#   --official-db-only=no     : permit third-party signature databases
+#                               alongside the official .cvd files, in
+#                               case a deployment ever adds one. Today
+#                               only the official set is present.
+#   --database=/var/lib/clamav: explicit database path.
+#   --heuristic-alerts        : engage ClamAV's structural / format-aware
+#                               detection (broken executables, encrypted
+#                               documents, phishing-style URL constructs)
+#                               in addition to signature matching. The
+#                               findings appear as Heuristics.* signature
+#                               names in the FOUND output, so the count
+#                               parser handles them with no change.
+#   --bytecode                : explicitly enable bytecode signatures
+#                               (.cbc files in the database). On by
+#                               default upstream, but stated explicitly
+#                               so a future ClamAV config change cannot
+#                               silently disable a detection capability.
+#   --max-filesize / --max-scansize : explicit per-file and per-archive
+#                               size caps. The upstream defaults (100 MiB
+#                               and 400 MiB) silently skip larger content
+#                               — a false-negative vector for a transfer
+#                               scanner. Both are set to CLAM_MAX_FILE_SIZE
+#                               from scanner.env (default 4 GiB).
+#   --alert-encrypted, --alert-encrypted-archive, --alert-encrypted-doc :
+#                               treat encrypted content as suspicious.
+#                               The scanner cannot see inside an
+#                               encrypted ZIP; passing it as clean
+#                               would be a lie. Operator-facing red
+#                               verdicts on legitimate password-protected
+#                               archives are deliberate — the right
+#                               response is to provide an unencrypted
+#                               copy alongside, not to wave the
+#                               unscanned bytes across the air gap.
+#   --alert-broken, --alert-broken-media : flag malformed PE/ELF/media
+#                               files. These are commonly used as
+#                               deliberate evasion against signature
+#                               scanners; a structurally invalid PE
+#                               with a benign-looking extension is
+#                               suspicious by construction.
+#
+# Note: --detect-pua (Potentially Unwanted Applications) is deliberately
+# NOT enabled here. PUA detection brings false positives on dual-use
+# tools (network scanners, password recovery utilities) that legitimate
+# transfers may include. Enabling it without first calibrating against
+# a corpus of expected transfers would produce excessive red verdicts
+# in initial deployment. Revisit after 1.0.0 with operator feedback.
 log "--- ClamAV ---"
 CLAMAV_EXIT=0
 CLAMAV_OUT="/tmp/clamav-scan.log"
 clamscan --recursive --infected --official-db-only=no \
-    --database=/var/lib/clamav "$SCANDIR" > "$CLAMAV_OUT" 2>&1 || CLAMAV_EXIT=$?
+    --database=/var/lib/clamav \
+    --heuristic-alerts \
+    --bytecode \
+    --max-filesize="$CLAM_MAX_FILE_SIZE" \
+    --max-scansize="$CLAM_MAX_FILE_SIZE" \
+    --alert-encrypted \
+    --alert-encrypted-archive \
+    --alert-encrypted-doc \
+    --alert-broken \
+    --alert-broken-media \
+    "$SCANDIR" > "$CLAMAV_OUT" 2>&1 || CLAMAV_EXIT=$?
 cat "$CLAMAV_OUT" > "$SERIAL"
 # Diagnostic: log the captured output size. If this is 0, ClamAV produced
 # no output at all and the count parser will report 0 regardless of exit
-# code — that's the symptom we hit before --quiet was removed.
+# code — the symptom we hit before --quiet was removed.
 log "ClamAV output: $(wc -c < "$CLAMAV_OUT") bytes"
 log "ClamAV exit: $CLAMAV_EXIT"
 
 # Per-engine summary for ClamAV. Status is independent of count: a
 # non-zero exit code with no findings is an error, not a threat.
+# The count parser is unchanged from the signature-only invocation —
+# every flag added above produces findings in the same "<path>: <name> FOUND"
+# format, so the grep continues to count them correctly.
 CLAMAV_COUNT=$(count_lines ' FOUND$' "$CLAMAV_OUT")
 CLAMAV_COUNT="${CLAMAV_COUNT:-0}"
 if [ "$CLAMAV_EXIT" -eq 1 ] && [ "$CLAMAV_COUNT" -gt 0 ]; then
