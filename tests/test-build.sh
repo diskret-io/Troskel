@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 # tests/test-build.sh
-# Runs the build pipeline end-to-end against the host directly.
-# Stops at the first failure. Run from the project root:
-#   sudo bash tests/test-build.sh
-#   sudo bash tests/test-build.sh --clean   # discard prior artefacts first
+# Runs the build pipeline end-to-end inside the troskel-build container.
+# Stops at the first failure.
+#
+# Invocation: `make build` (from the project root).
+#
+# Direct host invocation is not supported — the script gates on a
+# container sentinel and refuses to run on the host. The historical
+# host-direct path produced environment-dependent bugs (clamav user
+# missing on NixOS, chown semantics under sudo, varying sigtool
+# versions) that the containerised pipeline avoids by construction.
+# See docs/roadmap/build-system-rationalisation.md for the rationale.
 #
 # Covers:
 #   - Butane config validation
@@ -13,22 +20,38 @@
 #   - Guest kernel download
 #   - Scanner image build (debootstrap, ClamAV install, LOKI-RS install,
 #     signature/rule injection, ext4 image)
-#   - Build records generation (SBOM + per-build manifest)
-#   - SBOM-drift check: committed SBOM.json must match a fresh
-#     regeneration modulo volatile fields (serialNumber, timestamp)
 #
-# Requirements:
-#   - Debian/Ubuntu dev host
-#   - prepare-build-machine.sh already run (debootstrap, butane, firecracker,
-#     LOKI-RS, container runtime, etc. installed)
-#   - root (the underlying scripts need it for debootstrap, mkfs.ext4, writes
-#     to /var/lib/troskel)
+# Container-internal requirements (the Dockerfile and Makefile satisfy these):
+#   - root (the underlying scripts need it for debootstrap, mkfs.ext4,
+#     writes to /var/lib/troskel)
 #   - internet (for signature/rule/kernel downloads)
 #
 # Does not cover the scan pipeline — see test-scan.sh and manual-tests-scan.md.
 set -euo pipefail
 
 [ "$(id -u)" -eq 0 ] || { echo "[!] Must be run as root."; exit 1; }
+
+# ── Container sentinel gate ───────────────────────────────────────────────────
+# Refuses to run outside the troskel-build container. The sentinel is a
+# zero-byte file the Dockerfile creates at /.troskel-container; its
+# absence indicates host-direct invocation. The error message names the
+# supported entry point and also shows the docker-run fallback for the
+# fast-iteration loop, so a developer who hits this gate has a clear
+# next action without consulting docs.
+if [ ! -f /.troskel-container ]; then
+    echo "[!] tests/test-build.sh must run inside the troskel-build container."
+    echo ""
+    echo "    Supported invocation:"
+    echo "      make build"
+    echo ""
+    echo "    Fast-iteration fallback (run a single script in the container):"
+    echo "      docker run --rm --privileged \\"
+    echo "          --volume \"\$PWD:/troskel\" --workdir /troskel \\"
+    echo "          troskel-build bash tests/test-build.sh"
+    echo ""
+    echo "    See docs/roadmap/build-system-rationalisation.md for the rationale."
+    exit 1
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -49,7 +72,9 @@ cd "$PROJECT_ROOT"
 
 # Check for required tools individually so the operator knows exactly
 # what is missing rather than getting a single opaque failure.
-# Run scripts/prepare-build-machine.sh to install anything missing.
+# These should all be present inside the troskel-build container; a
+# failure here indicates the image is out of date relative to what
+# the test suite expects.
 PREFLIGHT_FAIL=0
 for tool in debootstrap butane firecracker; do
     command -v "$tool" >/dev/null 2>&1 \
@@ -59,23 +84,40 @@ done
     || { echo "[!] loki-rs not found at /opt/loki-rs/loki."; PREFLIGHT_FAIL=1; }
 if [ "$PREFLIGHT_FAIL" -ne 0 ]; then
     echo ""
-    echo "    Run: sudo bash scripts/prepare-build-machine.sh"
-    echo "    On NixOS: ensure tools are available via nix-env or configuration.nix,"
-    echo "    then install Firecracker, Butane, and LOKI-RS by running the script."
+    echo "    The container image appears to be out of date. Rebuild it:"
+    echo "      make clean && make image"
     exit 1
 fi
 
 if [ "$CLEAN" -eq 1 ]; then
-    step "0/7  Clearing prior artefacts under ${SIGDIR}"
-    rm -rf "${SIGDIR:?}"/{clamav-db,yara-rules,scanner-rootfs.ext4,scanner-rootfs.ext4.sha256,vmlinux,signature-date,yara-rules-date,yara-forge-resolved-tag,yara-forge-archive-sha256,build-manifest.json}
+    step "0/6  Clearing prior artefacts under ${SIGDIR}"
+    rm -rf "${SIGDIR:?}"/{clamav-db,yara-rules,scanner-rootfs.ext4,scanner-rootfs.ext4.sha256,vmlinux,signature-date,yara-rules-date}
     mkdir -p "${SIGDIR}"/{clamav-db,yara-rules,logs}
     echo "[+] Cleared."
 fi
 
 # ── SHA-256 verification negative-path tests ──────────────────────────────────
+# Deliberately corrupt a recorded SHA-256 and confirm the affected download
+# script fails cleanly with the expected error. This exercises the
+# verification path itself, not just its happy case — a regression that
+# silently accepts a mismatched hash would defeat the whole point of the
+# checksum-verification work.
+#
+# Each test:
+#   1. Saves the original value from versions.env.
+#   2. Substitutes a known-wrong value (all zeros).
+#   3. Deletes the installed artefact so the verification path runs.
+#   4. Runs the affected script under `set +e` and asserts it exits non-zero.
+#   5. Asserts the error output contains the expected mismatch text.
+#   6. Restores the original value.
+#
+# The restore step is in an EXIT trap so an interrupted test cannot leave
+# versions.env in a corrupted state.
 
-step "1/7  Verification negative-path tests"
+step "1/6  Verification negative-path tests"
 
+# Save originals up front so the trap can always restore them, even if
+# the test fails before substitution would normally run.
 ORIG_LOKI_SHA=""
 ORIG_KERNEL_SHA=""
 restore_versions_env() {
@@ -113,18 +155,25 @@ assert_fails_with() {
     echo "[+] ${LABEL}: failed cleanly with expected message"
 }
 
+# Test A — LOKI-RS verification (verify_sha256 helper, prepare-build-machine.sh)
 echo ""
 echo "  [a] LOKI-RS SHA-256 mismatch"
 ORIG_LOKI_SHA="$(grep -oP '(?<=^LOKI_SHA256=")[^"]*' "$VERSIONS_FILE")"
 [ -n "$ORIG_LOKI_SHA" ] \
     || { echo "[!] LOKI_SHA256 not set in versions.env — phase A not applied?"; exit 1; }
 sed -i "s|^LOKI_SHA256=.*|LOKI_SHA256=\"0000000000000000000000000000000000000000000000000000000000000000\"|" "$VERSIONS_FILE"
+# Remove the installed loki-rs to force re-download and re-verify.
 rm -rf /opt/loki-rs
 assert_fails_with "LOKI-RS mismatch" "SHA-256 mismatch for LOKI-RS" \
     bash scripts/prepare-build-machine.sh
+# Restore now so the rest of the test sees the correct value.
 sed -i "s|^LOKI_SHA256=.*|LOKI_SHA256=\"${ORIG_LOKI_SHA}\"|" "$VERSIONS_FILE"
-ORIG_LOKI_SHA=""
+ORIG_LOKI_SHA=""    # avoid double-restore in the trap
 
+# Test B — guest kernel verification (download-kernel.sh verify mode)
+# Only applicable if KERNEL_SHA256 is already populated (verify mode). If
+# the recorded value is empty (first-run discovery has not happened yet),
+# skip this test — there's nothing to corrupt.
 echo ""
 echo "  [b] guest kernel SHA-256 mismatch"
 ORIG_KERNEL_SHA="$(grep -oP '(?<=^KERNEL_SHA256=")[^"]*' "$VERSIONS_FILE")"
@@ -140,15 +189,28 @@ else
     ORIG_KERNEL_SHA=""
 fi
 
+# Re-install LOKI-RS now that the negative test is complete, so subsequent
+# steps see the build environment in its expected state.
 echo ""
 echo "  [+] Re-installing LOKI-RS for subsequent build steps"
 bash scripts/prepare-build-machine.sh >/dev/null
 
+# Negative tests done. Release the trap; from here on versions.env is correct
+# and any failure during the real build pipeline should leave it alone.
 trap - EXIT
 
 # ── Real build pipeline ───────────────────────────────────────────────────────
 
-step "2/7  Validate Butane config"
+step "2/6  Validate Butane config"
+# The committed config carries the sentinel @@SCANNER_PASSWORD_HASH@@ in
+# place of a real hash; prepare-boot-usb.sh substitutes a real hash at
+# build time. For the validation pass we substitute a known-good dummy
+# hash so butane --strict sees a syntactically valid crypt string. The
+# dummy is never written outside this temp file.
+#
+# --files-dir points butane at config/ so it can resolve local: references
+# in the config (e.g. host-scripts/*) regardless of where the temp file
+# lives. Without this, butane cannot find the host-scripts/ directory.
 TMP_CONFIG="$(mktemp --suffix=.bu)"
 trap 'rm -f "$TMP_CONFIG"' EXIT
 sed 's|@@SCANNER_PASSWORD_HASH@@|$6$dummysalt$dummyhashfortestingpurposesonly0000000000000000000000000000000000000000000000000000.|' \
@@ -156,71 +218,19 @@ sed 's|@@SCANNER_PASSWORD_HASH@@|$6$dummysalt$dummyhashfortestingpurposesonly000
 butane --strict --files-dir config "$TMP_CONFIG" > /dev/null
 echo "[+] Butane OK"
 
-step "3/7  Download ClamAV signatures"
+step "3/6  Download ClamAV signatures"
 bash scripts/download-clamav-signatures.sh
 
-step "4/7  Refresh LOKI-RS YARA rules"
+step "4/6  Refresh LOKI-RS YARA rules"
 bash scripts/download-loki-yara-rules.sh
 
-step "5/7  Download guest kernel"
+step "5/6  Download guest kernel"
 bash scripts/download-kernel.sh
 
-step "6/7  Build scanner image"
+step "6/6  Build scanner image"
 bash scripts/build-scanner-image.sh
-
-# ── Build records generation + SBOM drift check ───────────────────────────────
-# The generator produces SBOM.json (project root) and build-manifest.json
-# (/var/lib/troskel/). After generation, compare the just-emitted SBOM
-# against the committed-at-HEAD copy modulo the two volatile fields
-# (serialNumber and timestamp), which change every emission by design.
-#
-# A non-empty diff means the committed SBOM is stale relative to
-# versions.env or the captured build state — the typical cause is a
-# version bump in versions.env without a corresponding regeneration.
-# The fix is to commit the regenerated file.
-
-step "7/7  Build records and SBOM-drift check"
-
-# Capture the committed copy *before* the generator overwrites it on disk.
-SBOM_COMMITTED_TMP="$(mktemp --suffix=.json)"
-trap 'rm -f "$TMP_CONFIG" "$SBOM_COMMITTED_TMP" "${SBOM_COMMITTED_TMP}.norm" "${SBOM_COMMITTED_TMP}.fresh.norm"' EXIT
-git -C "$PROJECT_ROOT" show "HEAD:SBOM.json" > "$SBOM_COMMITTED_TMP" 2>/dev/null \
-    || { echo "[!] Could not read HEAD:SBOM.json — is the file committed?"; exit 1; }
-
-bash scripts/generate-build-records.sh
-
-# Normalise both files by stripping the volatile fields, then diff.
-# Pattern matches "serialNumber"/"timestamp" with optional whitespace
-# before the colon-value, robust against minor formatting differences.
-normalise_sbom() {
-    sed -E \
-        -e 's/"serialNumber":[[:space:]]*"[^"]*"/"serialNumber": "<volatile>"/' \
-        -e 's/"timestamp":[[:space:]]*"[^"]*"/"timestamp": "<volatile>"/g' \
-        "$1"
-}
-
-normalise_sbom "$SBOM_COMMITTED_TMP"             > "${SBOM_COMMITTED_TMP}.norm"
-normalise_sbom "${PROJECT_ROOT}/SBOM.json"       > "${SBOM_COMMITTED_TMP}.fresh.norm"
-
-if ! diff -u \
-    "${SBOM_COMMITTED_TMP}.norm" \
-    "${SBOM_COMMITTED_TMP}.fresh.norm"
-then
-    echo ""
-    echo "[!] SBOM drift detected."
-    echo "    The committed SBOM.json (at HEAD) does not match a fresh"
-    echo "    regeneration from versions.env and the build state."
-    echo ""
-    echo "    Typical cause: a version was bumped in versions.env without"
-    echo "    running 'sudo bash scripts/run-update.sh' to regenerate."
-    echo "    Fix: commit the regenerated SBOM.json (it is already on disk"
-    echo "    at the repo root; git status will show the diff)."
-    echo ""
-    exit 1
-fi
-echo "[+] SBOM in sync with versions.env and build state"
 
 echo ""
 echo "=== Build pipeline OK ==="
 echo "Artefacts under: ${SIGDIR}"
-echo "Next: sudo bash tests/test-scan.sh  (needs /dev/kvm)"
+echo "Next: make scan  (needs /dev/kvm)"

@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # tests/test-scan.sh
-# End-to-end scan tests against the host directly. Run from the project root:
-#   sudo bash tests/test-scan.sh
+# End-to-end scan tests inside the troskel-build container.
+#
+# Invocation: `make scan` (from the project root).
+#
+# Direct host invocation is not supported — the script gates on a
+# container sentinel and refuses to run on the host. See
+# docs/roadmap/build-system-rationalisation.md for the rationale.
 #
 # Two scans:
 #
@@ -21,15 +26,35 @@
 #
 # Yellow paths and other failure modes are documented in manual-tests-scan.md.
 #
-# Requirements:
-#   - test-build.sh already run (artefacts present under /var/lib/troskel)
-#   - /dev/kvm available and accessible to root
+# Container-internal requirements (the Dockerfile and Makefile satisfy these):
+#   - test-build.sh already run (artefacts present under /var/lib/troskel,
+#     persisted in the troskel-artefacts named volume)
+#   - /dev/kvm available and accessible to root (--device /dev/kvm in the
+#     Makefile target)
 #   - tests/files/EICAR.b64 present in the repo
 #   - tests/files/encrypted-test.zip.b64 present in the repo (see
 #     tests/files/README.md for the regeneration recipe)
 set -euo pipefail
 
 [ "$(id -u)" -eq 0 ] || { echo "[!] Must be run as root."; exit 1; }
+
+# ── Container sentinel gate ───────────────────────────────────────────────────
+# Refuses to run outside the troskel-build container. See test-build.sh
+# for the full rationale; the gate is identical here.
+if [ ! -f /.troskel-container ]; then
+    echo "[!] tests/test-scan.sh must run inside the troskel-build container."
+    echo ""
+    echo "    Supported invocation:"
+    echo "      make scan"
+    echo ""
+    echo "    Fast-iteration fallback (run a single script in the container):"
+    echo "      docker run --rm --privileged --device /dev/kvm \\"
+    echo "          --volume \"\$PWD:/troskel\" --workdir /troskel \\"
+    echo "          troskel-build bash tests/test-scan.sh"
+    echo ""
+    echo "    See docs/roadmap/build-system-rationalisation.md for the rationale."
+    exit 1
+fi
 
 [ "$#" -eq 0 ] || { echo "[!] Unknown arguments: $*"; exit 1; }
 
@@ -46,7 +71,7 @@ cd "$PROJECT_ROOT"
 
 [ -f "${SIGDIR}/scanner-rootfs.ext4" ] && [ -f "${SIGDIR}/vmlinux" ] \
     || { echo "[!] Build artefacts missing under ${SIGDIR}."; \
-         echo "    Run: sudo bash tests/test-build.sh"; exit 1; }
+         echo "    Run: make build"; exit 1; }
 
 [ -f tests/files/EICAR.b64 ] \
     || { echo "[!] Missing tests/files/EICAR.b64"; exit 1; }
@@ -58,7 +83,7 @@ cd "$PROJECT_ROOT"
 
 for tool in firecracker butane; do
     command -v "$tool" >/dev/null 2>&1 \
-        || { echo "[!] '$tool' not on PATH. Run scripts/prepare-build-machine.sh first."; exit 1; }
+        || { echo "[!] '$tool' not on PATH. The container image may be out of date — try: make clean && make image"; exit 1; }
 done
 
 # --- scan-wrap setup --------------------------------------------------------

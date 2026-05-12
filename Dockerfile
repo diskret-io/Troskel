@@ -103,7 +103,26 @@ RUN set -eu; \
     && rm -rf "$TMPDIR_LOKI"
 
 # Create the working directories expected by the test scripts.
-RUN mkdir -p /var/lib/troskel/{clamav-db,yara-rules,logs}
+RUN mkdir -p /var/lib/troskel/clamav-db /var/lib/troskel/yara-rules /var/lib/troskel/logs
+
+# Container sentinel.
+# /.troskel-container is an empty marker file used by the test scripts to
+# verify they are running inside the troskel-build container rather than
+# directly on a developer's host. See docs/roadmap/build-system-
+# rationalisation.md — the rationalised contract is "test scripts run
+# inside the container, period". The host-direct path was a source of
+# environment-dependent bugs (the freshclam clamav-user issue, the
+# chown-as-root issue) that go away when the test environment is
+# uniformly Debian-the-container.
+#
+# A developer who genuinely needs the fast-iteration loop on a single
+# script can still invoke the container directly:
+#   docker run --rm --privileged \
+#       --volume "$PWD:/troskel" --workdir /troskel \
+#       troskel-build bash scripts/download-loki-yara-rules.sh
+# This costs one container start per iteration (a few seconds) but
+# guarantees the script runs in the same environment as the test suite.
+RUN touch /.troskel-container
 
 # The project is bind-mounted at /troskel at container run time, not
 # COPYed — so changes to the repo are reflected immediately without
