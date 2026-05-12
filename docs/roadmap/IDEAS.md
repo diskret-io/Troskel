@@ -12,7 +12,7 @@ When an idea becomes concrete enough to have a target version, an effort estimat
 
 **Quarantine Visualization**
 
-> Status: **Partly superseded.** The on-screen "show flagged filenames" portion is covered by [`improved-verdict-output.md`](improved-verdict-output.md) (target `1.0.0`). The USB-report portion (visual report with file hash, written to the output USB) is a follow-on to [`output-usb.md`](output-usb.md) and remains unscheduled.
+> Status: **Partly superseded.** The on-screen "show flagged filenames" portion has landed in `main` — `scan-wrap` displays flagged files and their signature/rule names directly below the verdict block on a red result. The USB-report portion (visual report with file hash, written to the output USB) is a follow-on to [`output-usb.md`](output-usb.md) and remains unscheduled.
 
 If a threat is found, don't just block it. Create a visual report (on the result USB) showing exactly which file was infected, the threat type, and a hash of the malicious file. This helps the operator understand why the transfer failed.
 
@@ -26,7 +26,7 @@ Add a simple check to ensure the "Scan Host" hasn't been tampered with (e.g., ch
 
 **Color-Coded Workflow**
 
-> Status: **Speculative**, partly overlapping with [`improved-verdict-output.md`](improved-verdict-output.md). Decide before implementing whether this is a follow-on to the verdict-output work or a separate full-screen-state design.
+> Status: **Speculative**, partly overlapping with the verdict-display work that landed in `main`. Decide before implementing whether this is a follow-on to the current colour-blocked verdict screens or a separate full-screen-state design covering the pre-scan and in-scan states.
 
     Green Screen: "System Ready. Insert Data USB."
     Blue Screen: "Scanning in MicroVM... (Do not remove USB)."

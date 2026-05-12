@@ -49,7 +49,7 @@ Independent of the other roadmap items. No dependencies.
 
 Target `1.0.0`. Engaging these flags is `1.0.0`-grade hardening: same engine, same scan time, broader coverage of exactly the threats a transfer scanner should catch (encrypted archives, malformed PEs, dual-use tools). Shipping `1.0.0` while ClamAV runs in signature-only mode would mean leaving free detection capability on the table.
 
-Should land alongside `improved-verdict-output.md`. The new `--alert-encrypted` and `--alert-broken` flags will produce visible behavioural change — legitimate password-protected archives and structurally unusual PEs that previously passed as green will now go red. Operators need to see *what* was flagged, not just the verdict, or the change is frustrating rather than informative. The two changes are individually small but coupled in operator experience.
+The new `--alert-encrypted` and `--alert-broken` flags will produce visible behavioural change — legitimate password-protected archives and structurally unusual PEs that previously passed as green will now go red. The verdict-display refactor needed to make this behavioural change usable for operators (showing flagged filenames on screen rather than requiring a `grep` command) has already landed in `main`, so operators will see *what* was flagged when the new flags fire.
 
 ## Open questions
 

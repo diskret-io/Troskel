@@ -141,9 +141,9 @@ Two to three days:
 
 ## Sequencing
 
-Depends on `improved-verdict-output.md` being done first — the verdict display refactor touches the same end-of-scan section of `scan-wrap` and the two tasks conflict if done simultaneously.
+No outstanding dependencies. The verdict-display refactor that this work would have collided with (formerly tracked as `improved-verdict-output.md`) has landed in `main`; the end-of-scan section of `scan-wrap` is now in the shape this work expects to extend.
 
-Does not depend on the parallel engines or capa tasks. Independent of `checksum-verification.md`.
+Does not depend on the parallel engines or capa tasks.
 
 Target `1.1.0`. Does not block `1.0.0`.
 
