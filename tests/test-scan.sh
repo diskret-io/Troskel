@@ -5,11 +5,15 @@
 #
 # Two scans:
 #
-#   1. Red    — scans tests/files/EICAR.txt; expect THREAT DETECTED with both
-#               ENGINE: clamav status=threat (Eicar-Signature) and
-#               ENGINE: loki status=threat (TRELLIX_ARC_Malw_Eicar YARA rule).
-#               Both engines detecting EICAR exercises both verdict paths and
-#               confirms YARA rules and IOCs are correctly loaded.
+#   1. Red    — scans tests/files/EICAR.txt AND a known encrypted ZIP; expect
+#               THREAT DETECTED with:
+#                 - ENGINE: clamav status=threat — both the Eicar signature
+#                   and a Heuristics.Encrypted.* finding (from the encrypted
+#                   ZIP, via --alert-encrypted-archive)
+#                 - ENGINE: loki status=threat — TRELLIX_ARC_Malw_Eicar
+#                   YARA rule against the EICAR plaintext
+#               This exercises both engines, both verdict paths, and the new
+#               ClamAV alert classes added by the clamav-tightening work.
 #   2. Green  — scans a clean directory; expect CLEAN.
 #
 # The test runs against an unmodified production rootfs and takes about a
@@ -20,6 +24,9 @@
 # Requirements:
 #   - test-build.sh already run (artefacts present under /var/lib/troskel)
 #   - /dev/kvm available and accessible to root
+#   - tests/files/EICAR.b64 present in the repo
+#   - tests/files/encrypted-test.zip.b64 present in the repo (see
+#     tests/files/README.md for the regeneration recipe)
 set -euo pipefail
 
 [ "$(id -u)" -eq 0 ] || { echo "[!] Must be run as root."; exit 1; }
@@ -44,6 +51,11 @@ cd "$PROJECT_ROOT"
 [ -f tests/files/EICAR.b64 ] \
     || { echo "[!] Missing tests/files/EICAR.b64"; exit 1; }
 
+[ -f tests/files/encrypted-test.zip.b64 ] \
+    || { echo "[!] Missing tests/files/encrypted-test.zip.b64"
+         echo "    See tests/files/README.md for the regeneration recipe."
+         exit 1; }
+
 for tool in firecracker butane; do
     command -v "$tool" >/dev/null 2>&1 \
         || { echo "[!] '$tool' not on PATH. Run scripts/prepare-build-machine.sh first."; exit 1; }
@@ -61,20 +73,27 @@ head -c 64 /tmp/scan-wrap | grep -q "^#!" \
     || { echo "[!] config/host-scripts/scan-wrap is not a shell script."; exit 1; }
 echo "[+] scan-wrap ready at /tmp/scan-wrap"
 
-# --- Scan 1: Red — both engines should flag EICAR ------------------------
+# --- Scan 1: Red — EICAR + encrypted archive ------------------------------
 # EICAR is stored base64-encoded in the repo (tests/files/EICAR.b64) so
 # that developer AV tools do not flag the repo itself. It is decoded to
 # a temp file here, immediately before scanning — the microVM sees the
 # real EICAR content and detects it correctly.
+#
+# encrypted-test.zip is a small password-protected ZIP, also base64-
+# encoded for the same reason: --alert-encrypted-archive flags any
+# encrypted ZIP, so committing an unencoded copy would trigger AV
+# scanners on the developer's host. Decoded here, scanned with EICAR,
+# detected via ClamAV's encrypted-archive alert.
 
 echo
-echo "=== Scan 1/2: Red — EICAR (exercises both engines) ==="
-mkdir -p /tmp/eicar-test-files
-base64 -d tests/files/EICAR.b64 > /tmp/eicar-test-files/EICAR.txt
-bash /tmp/scan-wrap /tmp/eicar-test-files 2>&1 | tee /tmp/scan-red.log
+echo "=== Scan 1/2: Red — EICAR + encrypted archive (exercises both engines) ==="
+mkdir -p /tmp/red-test-files
+base64 -d tests/files/EICAR.b64 > /tmp/red-test-files/EICAR.txt
+base64 -d tests/files/encrypted-test.zip.b64 > /tmp/red-test-files/encrypted-test.zip
+bash /tmp/scan-wrap /tmp/red-test-files 2>&1 | tee /tmp/scan-red.log
 
 if ! grep -q 'VERDICT: THREAT DETECTED' /tmp/scan-red.log; then
-    echo '[!] EICAR did not produce THREAT DETECTED — verdict pipeline broken'
+    echo '[!] Red scan did not produce THREAT DETECTED — verdict pipeline broken'
     exit 1
 fi
 # Belt-and-braces: assert each engine specifically. If only one engine breaks
@@ -92,6 +111,19 @@ if ! grep -q '^\[..:..:..\] ENGINE: loki status=threat' /tmp/scan-red.log; then
     exit 1
 fi
 echo '[+] EICAR detected by both engines as expected'
+
+# Check that ClamAV picked up the encrypted-archive heuristic. The
+# signature name for an encrypted ZIP alert in current ClamAV is
+# "Heuristics.Encrypted.Zip"; older versions use "Heuristics.Encrypted.ZIP"
+# or "Heuristics.Encrypted". Match the family rather than the exact name.
+if grep -qE 'encrypted-test\.zip:.*Heuristics\.Encrypted' /tmp/scan-red.log; then
+    echo '[+] Encrypted archive flagged by ClamAV --alert-encrypted-archive'
+else
+    echo '[!] Encrypted ZIP was not flagged by ClamAV — --alert-encrypted-archive may not be engaged'
+    echo '    ClamAV FOUND lines from the scan:'
+    grep ' FOUND$' /tmp/scan-red.log | sed 's/^/      /' || true
+    exit 1
+fi
 
 # Check whether the flagged filename appeared on screen — confirms show_findings works.
 if grep -q 'EICAR\|FOUND' /tmp/scan-red.log; then
@@ -116,5 +148,5 @@ fi
 echo '[+] Clean verdict as expected'
 
 echo
-echo "=== Scan pipeline OK — both engines and both verdict paths verified ==="
+echo "=== Scan pipeline OK — both engines, both verdict paths, and the encrypted-archive heuristic verified ==="
 echo "For yellow-path and stress checks, see tests/manual-tests-scan.md"
