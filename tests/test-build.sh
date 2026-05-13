@@ -10,7 +10,7 @@
 # host-direct path produced environment-dependent bugs (clamav user
 # missing on NixOS, chown semantics under sudo, varying sigtool
 # versions) that the containerised pipeline avoids by construction.
-# See docs/roadmap/build-system-rationalisation.md for the rationale.
+# See docs/DEVELOPER.md for the rationale.
 #
 # Covers:
 #   - Butane config validation
@@ -49,7 +49,7 @@ if [ ! -f /.troskel-container ]; then
     echo "          --volume \"\$PWD:/troskel\" --workdir /troskel \\"
     echo "          troskel-build bash tests/test-build.sh"
     echo ""
-    echo "    See docs/roadmap/build-system-rationalisation.md for the rationale."
+    echo "    See docs/DEVELOPER.md for the rationale."
     exit 1
 fi
 

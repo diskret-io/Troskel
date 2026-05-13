@@ -6,7 +6,7 @@
 #
 # Direct host invocation is not supported — the script gates on a
 # container sentinel and refuses to run on the host. See
-# docs/roadmap/build-system-rationalisation.md for the rationale.
+# docs/DEVELOPER.md for the rationale.
 #
 # Two scans:
 #
@@ -52,7 +52,7 @@ if [ ! -f /.troskel-container ]; then
     echo "          --volume \"\$PWD:/troskel\" --workdir /troskel \\"
     echo "          troskel-build bash tests/test-scan.sh"
     echo ""
-    echo "    See docs/roadmap/build-system-rationalisation.md for the rationale."
+    echo "    See docs/DEVELOPER.md for the rationale."
     exit 1
 fi
 
