@@ -7,8 +7,8 @@
 # Usage (via Makefile targets — preferred):
 #   make image          # build this image
 #   make validate       # Tier 1: Butane + shellcheck, no privileges needed
-#   make build          # Tier 2: full image build, needs --privileged
-#   make scan           # Tier 3: Firecracker scan test, needs --privileged + /dev/kvm
+#   make test-build     # Tier 2: full image build, needs --privileged
+#   make test-scan      # Tier 3: Firecracker scan test, needs --privileged + /dev/kvm
 #
 # Direct usage:
 #   docker build -t troskel-build .
@@ -108,12 +108,11 @@ RUN mkdir -p /var/lib/troskel/clamav-db /var/lib/troskel/yara-rules /var/lib/tro
 # Container sentinel.
 # /.troskel-container is an empty marker file used by the test scripts to
 # verify they are running inside the troskel-build container rather than
-# directly on a developer's host. See docs/roadmap/build-system-
-# rationalisation.md — the rationalised contract is "test scripts run
-# inside the container, period". The host-direct path was a source of
-# environment-dependent bugs (the freshclam clamav-user issue, the
-# chown-as-root issue) that go away when the test environment is
-# uniformly Debian-the-container.
+# directly on a developer's host. See docs/DEVELOPER.md — the rationalised
+# contract is "test scripts run inside the container, period". The
+# host-direct path was a source of environment-dependent bugs (the
+# freshclam clamav-user issue, the chown-as-root issue) that go away when
+# the test environment is uniformly Debian-the-container.
 #
 # A developer who genuinely needs the fast-iteration loop on a single
 # script can still invoke the container directly:

@@ -170,9 +170,9 @@ guest/                   Inside-the-microVM scripts (run-scan.sh, inittab)
 scripts/                 Build station scripts
 tests/                   Test pipeline (this guide is the canonical reference)
 docs/                    Documentation: this file, ADMIN.md, OPERATOR-GUIDE.md,
-                         ARCHITECTURE.md, SECURITY.md, roadmap/
+                         architecture.md, roadmap/
 Dockerfile               Defines the troskel-build container
 Makefile                 Wraps container invocations
 ```
 
-See [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) for the design rationale and [`docs/SECURITY.md`](SECURITY.md) for the threat model.
+See [`architecture.md`](architecture.md) for the design rationale and [`../SECURITY.md`](../SECURITY.md) for the threat model.

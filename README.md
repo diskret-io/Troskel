@@ -1,8 +1,9 @@
 # Troskel
 
 [![CI](https://github.com/diskret-io/Troskel/actions/workflows/ci.yml/badge.svg)](https://github.com/diskret-io/Troskel/actions/workflows/ci.yml)
-[![Upstream canary](https://github.com/diskret-io/Troskel/actions/workflows/upstream-canary.yml/badge.svg)](https://github.com/diskret-io/Troskel/actions/workflows/upstream-canary.yml)
+[![Upstream canary](https://github.com/diskret-io/Troskel/actions/workflows/upstream-canary.yml/badge.svg)](https://github.com/diskret-io/Troskel/actions/workflows/upstream-canary.yml)   
 ![license](https://img.shields.io/badge/license-MIT-blue?style=flat)
+[![Stand With Ukraine](https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/badges/StandWithUkraine.svg)](https://stand-with-ukraine.pp.ua)
 
 ## Air-gapped file transfer scanner
 
@@ -31,7 +32,7 @@ Build station (networked)                 Scanning host (air-gapped)
                                                power off → RAM cleared
 ```
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design rationale.
+See [`docs/architecture.md`](docs/architecture.md) for the full design rationale.
 
 ## Roles
 
@@ -101,8 +102,7 @@ tests/                   Test pipeline (see docs/DEVELOPER.md)
 docs/
   ADMIN.md               Admin guide
   DEVELOPER.md           Developer guide
-  ARCHITECTURE.md        Design rationale with diagrams
-  SECURITY.md            Security model and residual risks
+  architecture.md        Design rationale with diagrams
   OPERATOR-GUIDE.md      Operator troubleshooting reference
   roadmap/               Planned work
 ```
@@ -121,4 +121,4 @@ The security guarantee is: files that reach the air-gapped environment have been
 
 **Green** means no engine matched any known signature. It does not mean guaranteed clean: novel malware with no signature will not be detected. This is the inherent limitation of signature-based scanning.
 
-See [`docs/SECURITY.md`](docs/SECURITY.md) for the full threat model, residual risks, and design rationale.
+See [`SECURITY.md`](SECURITY.md) for the full threat model, residual risks, and design rationale.
