@@ -15,8 +15,8 @@
 #   --update        Update artefacts only; skip USB writing.
 #   --debug         Show full output from all sub-scripts.
 #
-# For developer use, run individual make targets instead:
-#   make validate   make build   make scan
+# For developer use, run the make targets instead:
+#   make validate   make test   make update
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -266,21 +266,20 @@ if [ "$PREFLIGHT_FAIL" -ne 0 ]; then
 fi
 
 # ── Phase 3: Update artefacts ─────────────────────────────────────────────────
-header "Updating artefacts"
+# Delegate to `make update`, which runs scripts/run-update.sh inside the
+# troskel-build container. One canonical refresh path: a developer typing
+# `make update` and an admin running troskel-build.sh both go through the
+# same target. Container output streams to stdout so the user sees real
+# progress during the rebuild rather than a silent prompt that looks hung.
+header "Updating artefacts (via make update)"
 
-_run_update() {
-    "$CONTAINER_RUNTIME" run --rm --privileged \
-        --volume "${PROJECT_ROOT}:/troskel:z" \
-        --volume "troskel-artefacts:/var/lib/troskel:z" \
-        --workdir /troskel \
-        troskel-build \
-        bash scripts/run-update.sh
-}
-
-run_step "Downloading ClamAV signatures"     bash "${SCRIPT_DIR}/download-clamav-signatures.sh"
-run_step "Refreshing LOKI-RS YARA rules"     bash "${SCRIPT_DIR}/download-loki-yara-rules.sh"
-run_step "Downloading guest kernel"          bash "${SCRIPT_DIR}/download-kernel.sh"
-run_step "Building scanner image"            bash "${SCRIPT_DIR}/build-scanner-image.sh"
+cd "$PROJECT_ROOT"
+if ! make update; then
+    echo ""
+    fail "make update failed."
+    echo "  Run 'make update' directly for the same output without this wrapper."
+    exit 1
+fi
 
 SIG_DATE="$(cat /var/lib/troskel/signature-date 2>/dev/null || echo 'unknown')"
 ok "Artefacts ready. Signature date: ${SIG_DATE}"
