@@ -10,6 +10,14 @@ Static scan of files for known malware before they cross into an air-gapped envi
 
 Troskel uses multiple engines — currently [ClamAV](https://www.clamav.net/) and [LOKI-RS](https://github.com/Neo23x0/Loki-RS) — with independent detection logic. Both engines run inside an isolated [Firecracker](https://firecracker-microvm.github.io) microVM on a live OS built on [CoreOS](https://fedoraproject.org/coreos). The guest runs in RAM only and leaves no persistent state between sessions.
 
+## Requirements
+
+**Linux required.** Both the build station and the scanning host run Linux. macOS and Windows are not supported.
+
+The build station needs Docker, and the scan tests need access to `/dev/kvm` for Firecracker. `/dev/kvm` is a Linux kernel facility; Docker Desktop on macOS and Windows runs containers inside its own Linux VM and does not expose host-level KVM, so `make test-scan` cannot work outside Linux even with Docker installed. The scanning host is itself Linux-only (CoreOS), and the artefacts the build station produces — Linux binaries, ext4 filesystems, Ignition configs — only make sense on a Linux target.
+
+There is no plan to support cross-platform builds. Use a Linux VM if you need to develop on macOS or Windows.
+
 ## How it works
 
 Two machines, two USBs, three steps.
@@ -103,6 +111,8 @@ make validate    # Tier 1: Butane config + shellcheck (~30 sec, no privileges)
 make test-build  # Tier 2: full build pipeline — debootstrap, signatures (~15 min)
 make test-scan   # Tier 3: Firecracker scan test — needs /dev/kvm (~5 min)
 make test        # run validate + test-build + test-scan in sequence
+make update      # refresh signatures, rebuild image, regenerate SBOM
+                 # (operational counterpart to test-build, no negative tests)
 ```
 
 `make build`, `make scan`, and `make all` continue to work as deprecated aliases for one release; they print a warning and run the renamed target. They will be removed in a future release.
@@ -136,6 +146,7 @@ scripts/                 Build station scripts
   prepare-data-usb.sh    Write TROSKEL-DATA USB
   prepare-boot-usb.sh    Write TROSKEL-BOOT USB
   build-scanner-image.sh Build Debian guest rootfs with ClamAV + LOKI-RS
+  generate-build-records.sh  Produce SBOM.json and per-build manifest
   download-*.sh          Individual download scripts
 
 tests/
