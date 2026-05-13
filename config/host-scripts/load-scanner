@@ -10,6 +10,15 @@ mkdir -p "$DEST"
 cp "$MOUNT/scanner-rootfs.ext4" "$DEST/"
 cp "$MOUNT/vmlinux"             "$DEST/"
 cp "$MOUNT/signature-date"      "$DEST/"
+cp "$MOUNT/yara-rules-date"     "$DEST/"
 cp "$MOUNT/scanner.env"         "$DEST/"
+
+# Optional: build-manifest.json. Older data USBs (written before the
+# sbom-automation work landed) will not have this file. Skip it silently
+# if absent — show-status handles the missing case.
+if [ -f "$MOUNT/build-manifest.json" ]; then
+    cp "$MOUNT/build-manifest.json" "$DEST/"
+fi
+
 umount "$MOUNT"
 echo "[+] Scanner loaded. Signature date: $(cat $DEST/signature-date)"
