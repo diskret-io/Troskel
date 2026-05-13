@@ -103,7 +103,6 @@ run_step() {
 header "Runtime detection"
 
 if command -v docker >/dev/null 2>&1; then
-    CONTAINER_RUNTIME="docker"
     ok "Container runtime: docker"
 else
     fail "Docker not found. Install Docker: https://docs.docker.com/engine/install/"
