@@ -8,13 +8,13 @@
 
 Static scan of files for known malware before they cross into an air-gapped environment.
 
-Troskel uses multiple engines — currently [ClamAV](https://www.clamav.net/) and [LOKI-RS](https://github.com/Neo23x0/Loki-RS) — with independent detection logic. Both engines run inside an isolated [Firecracker](https://firecracker-microvm.github.io) microVM on a live OS built on [CoreOS](https://fedoraproject.org/coreos). The guest runs in RAM only and leaves no persistent state between sessions.
+Troskel uses multiple engines, currently [ClamAV](https://www.clamav.net/) and [LOKI-RS](https://github.com/Neo23x0/Loki-RS), with independent detection logic. Both engines run inside an isolated [Firecracker](https://firecracker-microvm.github.io) microVM on a live OS built on [CoreOS](https://fedoraproject.org/coreos). The guest runs in RAM only and leaves no persistent state between sessions.
 
 ## Requirements
 
 **Linux required.** Both the build station and the scanning host run Linux. macOS and Windows are not supported.
 
-The build station needs Docker, and the scan tests need access to `/dev/kvm` for Firecracker. `/dev/kvm` is a Linux kernel facility; Docker Desktop on macOS and Windows runs containers inside its own Linux VM and does not expose host-level KVM, so `make test-scan` cannot work outside Linux even with Docker installed. The scanning host is itself Linux-only (CoreOS), and the artefacts the build station produces — Linux binaries, ext4 filesystems, Ignition configs — only make sense on a Linux target.
+The build station needs Docker, and the scan tests need access to `/dev/kvm` for Firecracker. `/dev/kvm` is a Linux kernel facility; Docker Desktop on macOS and Windows runs containers inside its own Linux VM and does not expose host-level KVM, so `make test-scan` cannot work outside Linux even with Docker installed. The scanning host is itself Linux-only (CoreOS), and the artefacts the build station produces (Linux binaries, ext4 filesystems, Ignition configs) only make sense on a Linux target.
 
 There is no plan to support cross-platform builds. Use a Linux VM if you need to develop on macOS or Windows.
 
@@ -35,50 +35,17 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design rationale
 
 ## Roles
 
-- **Admin** — prepares the two USBs on the build station before each scan session.
-- **Operator** — transfers files to the scanning host and runs the scan.
+Three roles, three docs:
 
----
-
-## Admin workflow
-
-On the build station, insert both USB sticks and run:
-
-```bash
-sudo bash scripts/troskel-build.sh
-```
-
-`troskel-build.sh` guides you through the full process interactively:
-- Detects connected USB devices and asks you to assign roles
-- Downloads fresh ClamAV signatures and YARA rules
-- Builds the scanner image
-- Writes both USB sticks and verifies checksums
-- Displays the scanning host passphrase prominently at the end
-
-### Flags
-
-| Flag         | Effect                                   |
-|--------------|------------------------------------------|
-| `--usb-data` | Write TROSKEL-DATA only (one USB needed) |
-| `--usb-boot` | Write TROSKEL-BOOT only (one USB needed) |
-| `--update`   | Refresh artefacts only, skip USB writing |
-| `--debug`    | Show full output from all sub-steps      |
-
-### First-time setup
-
-On a fresh build station, install Docker first:
-```bash
-# See https://docs.docker.com/engine/install/ for your distribution
-sudo bash scripts/prepare-build-machine.sh
-```
-
-`troskel-build.sh` uses Docker automatically. All build tooling runs inside a container — the host needs only Docker installed.
+- **Operator** scans files on the air-gapped scanning host. See the operator workflow below; for troubleshooting see [`docs/OPERATOR-GUIDE.md`](docs/OPERATOR-GUIDE.md).
+- **Admin** prepares USBs on the build station before each scan session. See [`docs/ADMIN.md`](docs/ADMIN.md).
+- **Developer** changes the project's code. See [`docs/DEVELOPER.md`](docs/DEVELOPER.md).
 
 ---
 
 ## Operator workflow
 
-1. **Prepare the file USB** on any networked machine — copy the files you want to transfer onto a standard USB drive (FAT32, ext4, or exFAT).
+1. **Prepare the file USB** on any networked machine. Copy the files you want to transfer onto a standard USB drive (FAT32, ext4, or exFAT).
 2. **Insert the TROSKEL-BOOT and TROSKEL-DATA USBs** into the scanning host and power on. Leave the file USB out for now.
 3. **Log in** as the `scanner` user with the passphrase from the admin.
 4. **Check the system is ready:**
@@ -101,26 +68,6 @@ sudo bash scripts/prepare-build-machine.sh
 
 ---
 
-## Developer workflow
-
-The `make` targets run everything inside Docker — the same container image used by the admin workflow. Docker is the only host dependency.
-
-```bash
-make image       # build the troskel-build container image (~5 min first time)
-make validate    # Tier 1: Butane config + shellcheck (~30 sec, no privileges)
-make test-build  # Tier 2: full build pipeline — debootstrap, signatures (~15 min)
-make test-scan   # Tier 3: Firecracker scan test — needs /dev/kvm (~5 min)
-make test        # run validate + test-build + test-scan in sequence
-make update      # refresh signatures, rebuild image, regenerate SBOM
-                 # (operational counterpart to test-build, no negative tests)
-```
-
-`make build`, `make scan`, and `make all` continue to work as deprecated aliases for one release; they print a warning and run the renamed target. They will be removed in a future release.
-
-See [`tests/README.md`](tests/README.md) for more detail.
-
----
-
 ## Project structure
 
 ```
@@ -139,26 +86,24 @@ guest/
   run-scan.sh            In-VM scan entrypoint (runs inside Firecracker guest)
   inittab                Busybox init configuration
 
-scripts/                 Build station scripts
+scripts/                 Build station scripts (see docs/ADMIN.md, docs/DEVELOPER.md)
   troskel-build.sh       Guided admin workflow entry point
   prepare-build-machine.sh  One-time build station setup
-  run-update.sh          Update signatures and rebuild scanner image
+  run-update.sh          Refresh signatures and rebuild scanner image
   prepare-data-usb.sh    Write TROSKEL-DATA USB
   prepare-boot-usb.sh    Write TROSKEL-BOOT USB
   build-scanner-image.sh Build Debian guest rootfs with ClamAV + LOKI-RS
   generate-build-records.sh  Produce SBOM.json and per-build manifest
   download-*.sh          Individual download scripts
 
-tests/
-  test-validate.sh       Tier 1: static validation (no privileges)
-  test-build.sh          Tier 2: build pipeline (containerised, runs via `make test-build`)
-  test-scan.sh           Tier 3: Firecracker scan (containerised, runs via `make test-scan`)
-  manual-tests-scan.md   Manual test procedures (yellow path, cleanup, etc.)
+tests/                   Test pipeline (see docs/DEVELOPER.md)
 
 docs/
+  ADMIN.md               Admin guide
+  DEVELOPER.md           Developer guide
   ARCHITECTURE.md        Design rationale with diagrams
   SECURITY.md            Security model and residual risks
-  OPERATOR-GUIDE.md      Full operator reference
+  OPERATOR-GUIDE.md      Operator troubleshooting reference
   roadmap/               Planned work
 ```
 
@@ -174,6 +119,6 @@ Planned work is tracked in [`docs/roadmap/`](docs/roadmap/). Each document carri
 
 The security guarantee is: files that reach the air-gapped environment have been scanned by two independent engines running in a hardware-virtualised microVM with no network access, against signatures updated before each session.
 
-**Green** means no engine matched any known signature. It does not mean guaranteed clean — novel malware with no signature will not be detected. This is the inherent limitation of signature-based scanning.
+**Green** means no engine matched any known signature. It does not mean guaranteed clean: novel malware with no signature will not be detected. This is the inherent limitation of signature-based scanning.
 
 See [`docs/SECURITY.md`](docs/SECURITY.md) for the full threat model, residual risks, and design rationale.
