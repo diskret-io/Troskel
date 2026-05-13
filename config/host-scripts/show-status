@@ -2,7 +2,9 @@
 echo ""
 echo "=== Scanner status ==="
 SIG="$(cat /var/lib/troskel/signature-date 2>/dev/null || echo 'not loaded')"
+YARA="$(cat /var/lib/troskel/yara-rules-date 2>/dev/null || echo 'not loaded')"
 echo "  Signature date : $SIG"
+echo "  YARA rules date: $YARA"
 if [ -f /var/lib/troskel/scanner-rootfs.ext4 ]; then
     SZ="$(du -sh /var/lib/troskel/scanner-rootfs.ext4 | cut -f1)"
     echo "  Scanner image  : loaded ($SZ)"
@@ -21,5 +23,35 @@ if [ -n "$LAST" ]; then
     echo "  Last result    : $RESULT"
 else
     echo "  Last scan      : none this session"
+fi
+
+# Build identity from the per-build manifest. Optional: older data USBs
+# may not carry the manifest. Parsing without jq (not installed on the
+# scanning host) — the manifest is small, the fields are stable, grep+sed
+# is sufficient.
+MANIFEST="/var/lib/troskel/build-manifest.json"
+echo ""
+echo "=== Scanner build ==="
+if [ -f "$MANIFEST" ]; then
+    extract() {
+        # extract <key>  reads "<key>": "<value>" from $MANIFEST.
+        grep -o "\"$1\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$MANIFEST" 2>/dev/null \
+            | head -1 \
+            | sed 's/.*"\([^"]*\)"$/\1/'
+    }
+    GEN="$(extract generated_at)"
+    COMMIT="$(extract troskel_commit)"
+    DIRTY="$(extract troskel_dirty)"
+    echo "  Generated      : ${GEN:-unknown}"
+    echo "  Troskel commit : ${COMMIT:-unknown}"
+    if [ "$DIRTY" = "false" ]; then
+        echo "  Tree clean     : yes"
+    elif [ "$DIRTY" = "true" ]; then
+        echo "  Tree clean     : NO — uncommitted changes at build time"
+    else
+        echo "  Tree clean     : unknown"
+    fi
+else
+    echo "  (build manifest not present — data USB predates manifest support)"
 fi
 echo ""
