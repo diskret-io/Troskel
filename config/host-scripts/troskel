@@ -1,5 +1,27 @@
 #!/bin/bash
+# troskel: operator entry point.
+#
+# Phase 0 hardening (interim mitigation for docs/roadmap/ingest-vm.md):
+#   - Filesystem type is determined by blkid on the host and constrained
+#     to a fixed allowlist (ext4, vfat). Unsupported filesystems are
+#     refused before any mount is attempted.
+#   - The mount call passes -t <fs> explicitly, eliminating the host
+#     kernel's filesystem autodetection path.
+#   - The mount uses -o ro,nodev,nosuid,noexec.
+#
+# The hotplug auto-selection (tail -1) is preserved in this phase. The
+# explicit-selection rewrite lands with the ingest-VM work (Phase 2),
+# where it composes with the new enumeration flow rather than being
+# bolted onto the existing flow now.
 set -euo pipefail
+
+# Hard-coded allowlist. Mirrors the set documented in
+# docs/OPERATOR-GUIDE.md. NTFS and exFAT are deliberately excluded; their
+# kernel parsers carry more surface than the project is willing to expose
+# even under the interim mitigation. Phase 2 moves filesystem detection
+# behind the ingest VM but does not widen this set.
+ALLOWED_FS=(ext4 vfat)
+
 SCAN_DEV="${1:-}"
 if [ -z "$SCAN_DEV" ]; then
     SCAN_DEV="$(lsblk -dpno NAME,HOTPLUG | awk '$2==1{print $1}' | tail -1)"
@@ -7,10 +29,52 @@ if [ -z "$SCAN_DEV" ]; then
         || { echo "[!] No USB detected. Insert file USB and try again."; exit 1; }
     echo "[*] Detected file USB: $SCAN_DEV"
 fi
+
+# Determine filesystem type without mounting. blkid reads the superblock
+# signature region only. The call is wrapped in a strict timeout and its
+# output validated against the allowlist before being used. The -s TYPE
+# -o value form returns a single bare token; anything else aborts.
+FS_TYPE="$(timeout 5s blkid -s TYPE -o value "$SCAN_DEV" 2>/dev/null || true)"
+if [ -z "$FS_TYPE" ]; then
+    echo "[!] Could not determine filesystem type on $SCAN_DEV."
+    echo "    The USB may be unformatted, encrypted, or its filesystem is"
+    echo "    not recognised by blkid. Reformat as ext4 or FAT32 and retry."
+    exit 1
+fi
+
+# Validate against the allowlist. Substring matching is avoided here: the
+# value must match a list entry exactly. A blkid output of `ext4 ` with
+# trailing whitespace, or `EXT4`, would fail this check by design.
+FS_OK=0
+for ALLOWED in "${ALLOWED_FS[@]}"; do
+    if [ "$FS_TYPE" = "$ALLOWED" ]; then
+        FS_OK=1
+        break
+    fi
+done
+
+if [ "$FS_OK" -ne 1 ]; then
+    echo "[!] Filesystem '$FS_TYPE' on $SCAN_DEV is not supported."
+    echo "    Supported filesystems: ${ALLOWED_FS[*]}"
+    echo ""
+    echo "    NTFS and exFAT are not supported as of this release. Reformat"
+    echo "    the file USB as ext4 (Linux) or FAT32 (universal interchange)"
+    echo "    and copy the files across, or use a different medium."
+    exit 1
+fi
+
 mkdir -p /mnt/usb
-mount -o ro "$SCAN_DEV" /mnt/usb \
-    || { echo "[!] Failed to mount $SCAN_DEV."; exit 1; }
-echo "[+] File USB mounted read-only."
+
+# Mount with explicit -t. The kernel's filesystem-detection path is no
+# longer reached. -o ro,nodev,nosuid,noexec is conservative against a
+# malicious filesystem that attempts to present device nodes, set-uid
+# binaries, or executable payloads at mount time; the post-mount tree
+# walk in scan-wrap also excludes these node types by construction.
+mount -t "$FS_TYPE" -o ro,nodev,nosuid,noexec "$SCAN_DEV" /mnt/usb \
+    || { echo "[!] Failed to mount $SCAN_DEV as $FS_TYPE."; exit 1; }
+
+echo "[+] File USB mounted read-only (filesystem: $FS_TYPE)."
+
 /usr/local/bin/scan-wrap /mnt/usb
 umount /mnt/usb 2>/dev/null || true
 echo "[+] File USB unmounted."
