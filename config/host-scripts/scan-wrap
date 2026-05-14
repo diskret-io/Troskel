@@ -1,6 +1,21 @@
 #!/bin/bash
 # scan-wrap — host-side Firecracker wrapper
 # Usage: scan-wrap <directory-to-scan>
+#
+# Phase 0 hardening (interim mitigation for docs/roadmap/ingest-vm.md):
+#   - The previous `mkfs.ext4 -F -d "$TARGET_DIR"` walk reflected every
+#     node type in the source tree (symlinks, device nodes, FIFOs,
+#     sockets) into the constructed scanfiles image. The walk is now a
+#     two-step process: first stage regular files and directories into a
+#     fresh tree using `find -type f -o -type d`, then construct the
+#     image from the staging tree.
+#   - Hard caps on file count, tree depth, and total bytes are enforced
+#     before image construction. Any cap breach aborts before mkfs runs.
+#     Fail-closed; no partial image is presented to the scanner VM.
+#
+# The caps live as constants in this script for Phase 0. The ingest-VM
+# work (Phase 2) migrates them to scanner.env keys with engine-prefixed
+# names matching the wider per-engine sizing convention.
 set -euo pipefail
 
 TARGET_DIR="${1:?Usage: scan-wrap <directory-to-scan>}"
@@ -22,6 +37,19 @@ SCANNER_ENV="${SIGDIR}/scanner.env"
 GUEST_VCPU_COUNT="${GUEST_VCPU_COUNT:-2}"
 GUEST_MEM_MIB="${GUEST_MEM_MIB:-2048}"
 SCAN_IMG_SIZE="${SCAN_IMG_SIZE:-4G}"
+
+# Phase 0 ingest caps. Hard-coded; migrated to scanner.env when the
+# ingest VM lands.
+#   STAGE_MAX_FILE_COUNT: count of regular files in the source tree.
+#   STAGE_MAX_TREE_DEPTH: max directory depth, counted from the source
+#                         root inclusive.
+#   STAGE_MAX_TOTAL_BYTES: sum of regular-file sizes. Sits below
+#                          SCAN_IMG_SIZE (4 GiB default) with margin for
+#                          ext4 metadata overhead.
+STAGE_MAX_FILE_COUNT=100000
+STAGE_MAX_TREE_DEPTH=32
+STAGE_MAX_TOTAL_BYTES=$((3750 * 1024 * 1024))   # 3.75 GiB
+
 FC_PID=""
 
 cleanup() {
@@ -42,9 +70,77 @@ mkdir -p "$LOG_DIR"
 EPHEMERAL="${WORK}/rootfs.ext4"
 cp --sparse=always "$BASE_IMAGE" "$EPHEMERAL"
 
+# ── Staged source-tree construction ───────────────────────────────────────────
+# Build a clean staging tree containing only regular files and the
+# directories needed to hold them. Symlinks, device nodes, FIFOs, and
+# sockets are excluded by construction; the resulting ext4 image cannot
+# contain them regardless of what was on the file USB.
+#
+# Caps are enforced before any copying begins. The `find -xdev` flag
+# constrains the walk to a single filesystem so a stray bind mount or
+# automounted submount cannot expand the workload past the cap.
+STAGE_DIR="${WORK}/stage"
+mkdir -p "$STAGE_DIR"
+
+echo "[*] Enumerating source tree..."
+
+# Tree-depth check. -mindepth N+1 catches any path strictly deeper than
+# the cap. A single positive hit aborts; we do not need to enumerate all
+# violators. -print -quit stops find on first match for low cost.
+if find "$TARGET_DIR" -xdev -mindepth "$((STAGE_MAX_TREE_DEPTH + 1))" -print -quit 2>/dev/null | grep -q .; then
+    echo "[!] Source tree exceeds maximum depth (${STAGE_MAX_TREE_DEPTH})."
+    echo "    Reduce the directory nesting on the file USB and retry."
+    exit 1
+fi
+
+# File-count check. Counting with find avoids loading the full file list
+# into shell memory; the count itself is bounded by the cap check below.
+FILE_COUNT="$(find "$TARGET_DIR" -xdev -type f 2>/dev/null | wc -l)"
+if [ "$FILE_COUNT" -gt "$STAGE_MAX_FILE_COUNT" ]; then
+    echo "[!] Source tree contains ${FILE_COUNT} files, exceeding the cap of ${STAGE_MAX_FILE_COUNT}."
+    echo "    Reduce the number of files on the file USB and retry."
+    exit 1
+fi
+
+# Total-bytes check. `find -printf '%s\n'` is GNU-specific but available
+# on the CoreOS host; on a dev box without GNU find, stat is the fallback.
+if find --version 2>/dev/null | grep -q GNU; then
+    TOTAL_BYTES="$(find "$TARGET_DIR" -xdev -type f -printf '%s\n' 2>/dev/null \
+        | awk '{s+=$1} END{print s+0}')"
+else
+    TOTAL_BYTES="$(find "$TARGET_DIR" -xdev -type f -exec stat -c '%s' {} + 2>/dev/null \
+        | awk '{s+=$1} END{print s+0}')"
+fi
+if [ "$TOTAL_BYTES" -gt "$STAGE_MAX_TOTAL_BYTES" ]; then
+    echo "[!] Source tree totals ${TOTAL_BYTES} bytes, exceeding the cap of ${STAGE_MAX_TOTAL_BYTES} bytes."
+    echo "    Reduce the size of the transfer and retry."
+    exit 1
+fi
+
+echo "[*] Staging ${FILE_COUNT} regular file(s), ${TOTAL_BYTES} bytes..."
+
+# Stage via find piping into tar in store-and-extract mode. The first
+# tar reads the null-delimited list and writes a tar stream to stdout
+# without recursing into the listed entries; the second tar extracts the
+# stream into the staging directory. The stream is restricted to regular
+# files and directories by find's -type filter, so the staging tree
+# physically cannot contain symlinks, device nodes, FIFOs, or sockets.
+#
+# find's -L is not used: symlinks are not followed. tar in the producer
+# stage uses --no-recursion so it does not re-expand directories that
+# find already enumerated.
+( cd "$TARGET_DIR" && \
+  find . -xdev \( -type f -o -type d \) -print0 \
+  | tar --null --no-recursion -cf - --files-from=- \
+  | tar -xf - -C "$STAGE_DIR" ) \
+  || { echo "[!] Failed to stage source tree."; exit 1; }
+
+# ── Image construction ────────────────────────────────────────────────────────
+# Build the scan image from the sanitised staging tree, not from the
+# original mount. The previous `mkfs.ext4 -d "$TARGET_DIR"` call is gone.
 SCAN_IMG="${WORK}/scanfiles.ext4"
 truncate -s "${SCAN_IMG_SIZE}" "$SCAN_IMG"
-mkfs.ext4 -F -d "$TARGET_DIR" "$SCAN_IMG" 2>/dev/null
+mkfs.ext4 -F -d "$STAGE_DIR" "$SCAN_IMG" 2>/dev/null
 
 cat > "${WORK}/fc-config.json" <<EOF
 {

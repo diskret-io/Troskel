@@ -10,7 +10,11 @@ This guide is technical. Site policy on what to do with flagged file USBs (retur
 
 The file USB is a standard USB storage device containing the files you want to transfer into the air-gapped environment. It is separate from the TROSKEL-BOOT and TROSKEL-DATA USBs used by the scanning host itself.
 
-**Format:** Any filesystem the scanning host can mount — ext4, FAT32, and exFAT all work. NTFS works on most configurations. There is no special preparation required. Copy the files to the USB as you normally would on any machine.
+**Format:** The file USB must be formatted as **ext4** or **FAT32**. NTFS and exFAT are not supported as of this release; reformat or use a different medium if your USB is currently NTFS or exFAT.
+
+The narrower supported set reduces the host's exposure to malicious filesystem images. The scanning host refuses to mount any other filesystem, returning a clear message before any scan is attempted. (For the engineering rationale, see `docs/roadmap/ingest-vm.md`.)
+
+There is no other special preparation required. Copy the files to the USB as you normally would on any machine.
 
 **What to put on it:** The files you intend to transfer — documents, software packages, datasets, or anything else. Organise them however you like. `troskel` scans everything on the USB recursively, including files inside subdirectories.
 
