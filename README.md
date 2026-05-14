@@ -45,7 +45,7 @@ Three roles, three docs:
 
 ## Operator workflow
 
-1. **Prepare the file USB** on any networked machine. Copy the files you want to transfer onto a standard USB drive (FAT32, ext4, or exFAT).
+1. **Prepare the file USB** on any networked machine. Copy the files you want to transfer onto a standard USB drive (ext4 or FAT32). NTFS and exFAT are not supported; see [`docs/OPERATOR-GUIDE.md`](docs/OPERATOR-GUIDE.md) for the rationale.
 2. **Insert the TROSKEL-BOOT and TROSKEL-DATA USBs** into the scanning host and power on. Leave the file USB out for now.
 3. **Log in** as the `scanner` user with the passphrase from the admin.
 4. **Check the system is ready:**
