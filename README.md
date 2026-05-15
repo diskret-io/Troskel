@@ -9,6 +9,26 @@
 Static scan of files for known malware before they cross into an air-gapped environment.
 
 Troskel uses multiple engines, currently [ClamAV](https://www.clamav.net/) and [LOKI-RS](https://github.com/Neo23x0/Loki-RS), with independent detection logic. Both engines run inside an isolated [Firecracker](https://firecracker-microvm.github.io) microVM on a live OS built on [CoreOS](https://fedoraproject.org/coreos). The guest runs in RAM only and leaves no persistent state between sessions.
+ 
+## Project status
+
+**Version: 0.9.0. Pre-1.0.0, demonstrator / evaluation-grade.**
+
+Suitable for:
+
+- Technical evaluation of the architecture.
+- Lab and homelab air-gap workflows.
+- Reading, forking, contributing.
+
+Not suitable for:
+
+- Production deployment in regulated environments (ISO/IEC 27001 and similar).
+- Critical-infrastructure use (IEC 62443, NIS2).
+- Any setting requiring a signed, attestable scan certificate.
+
+See [`SECURITY.md`](SECURITY.md) for the threat model and known limits of
+signature-based scanning. 1.0.0 is a documentation and pipeline milestone,
+not a security-posture commitment.
 
 ## Requirements
 
