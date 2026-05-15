@@ -55,7 +55,7 @@ ClamAV and LOKI-RS run concurrently. Capa runs as a conditional third pass, only
 
 The existing hardware-virtualisation boundary between host and guest provides the primary isolation guarantee: a parser exploit within any engine cannot reach the CoreOS scanning host. Within the current single guest, however, all engines share a process namespace. A guest-level compromise by one engine could in principle interfere with another engine's verdict signal on `/dev/ttyS0`.
 
-Separate VMs close this gap: each engine writes to its own serial device, the host reads independent logs, and there is no shared address space between engines at any point. The security gain is incremental — the guest-to-host channel is already constrained to one-way text — but it is the honest implementation of the "parser surfaces should be assumed exploitable" principle stated in `ARCHITECTURE.md`.
+Separate VMs close this gap: each engine writes to its own serial device, the host reads independent logs, and there is no shared address space between engines at any point. The security gain is incremental — the guest-to-host channel is already constrained to one-way text — but it is the honest implementation of the "parser surfaces should be assumed exploitable" principle stated in `architecture.md`.
 
 ## What changes
 

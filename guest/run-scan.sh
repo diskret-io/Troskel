@@ -3,7 +3,7 @@
 #
 # Two engines run sequentially over the read-only scan target. Their
 # verdicts are combined under OR semantics — either engine flagging a
-# threat produces a red verdict (see ARCHITECTURE.md, "Why two engines").
+# threat produces a red verdict (see architecture.md, "Why two engines").
 #
 #   ClamAV   — exit 0 = clean, 1 = infected, anything else = error.
 #   LOKI-RS  — exit code is not a reliable verdict signal; we parse the
@@ -12,7 +12,7 @@
 #
 # The host-side wrapper greps the serial log for the exact strings
 # emitted below (THREAT DETECTED / CLEAN / ERROR) — see the verdict
-# pipeline notes in ARCHITECTURE.md for why guest and host both perform
+# pipeline notes in architecture.md for why guest and host both perform
 # verdict logic. Each engine also emits an ENGINE: summary line that the
 # host displays under the verdict block, so the operator sees which
 # engine flagged what without scrolling through the full log.
