@@ -39,7 +39,7 @@
       "type": "operating-system",
       "name": "fedora-coreos",
       "version": "stable-stream",
-      "description": "CoreOS variant for scanning host. Tracks the 'stable' stream; the resolved version is not captured by this generator (see docs/roadmap/build-manifest.md open questions). ISO verified by coreos-installer against the Fedora signing key.",
+"description": "CoreOS variant for scanning host. Tracks the 'stable' stream; the resolved version is not yet captured per build (planned hardening). ISO verified by coreos-installer against the Fedora signing key.",
       "supplier": {"name": "Fedora Project"},
       "licenses": [{"license": {"id": "GPL-2.0-only"}}],
       "purl": "pkg:generic/fedora-coreos@stable",
