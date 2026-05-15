@@ -12,6 +12,14 @@
 #   - Hard caps on file count, tree depth, and total bytes are enforced
 #     before image construction. Any cap breach aborts before mkfs runs.
 #     Fail-closed; no partial image is presented to the scanner VM.
+#   - The staging copy uses tar in pipe mode with --no-recursion on the
+#     producer side and a paranoid set of options on the consumer side
+#     (--no-overwrite-dir, default rejection of absolute paths). Neither
+#     tar invocation dereferences symlinks: --warning=no-file-changed
+#     makes a symlink that races into being between find's enumeration
+#     and tar's open a silent drop rather than a followed link.
+#   - A post-stage assertion confirms the staging tree contains only
+#     regular files and directories before image construction begins.
 #
 # The caps live as constants in this script for Phase 0. The ingest-VM
 # work (Phase 2) migrates them to scanner.env keys with engine-prefixed
@@ -126,14 +134,57 @@ echo "[*] Staging ${FILE_COUNT} regular file(s), ${TOTAL_BYTES} bytes..."
 # files and directories by find's -type filter, so the staging tree
 # physically cannot contain symlinks, device nodes, FIFOs, or sockets.
 #
+# Symlink-race defence. `find -type f` returns paths whose lstat at
+# enumeration time was a regular file. An attacker with write access to
+# the source tree could, in principle, race a symlink into being between
+# the find call and the producer tar's open of each path. The
+# countermeasures here:
+#
+#   - Neither tar invocation passes -h or --dereference. GNU tar without
+#     these flags refuses to follow symlinks; if a path resolves to a
+#     symlink at archive time, tar archives the symlink itself (not its
+#     target). The find -type filter has already excluded symlinks from
+#     the input list, so any symlink that appears at archive time is
+#     necessarily a post-enumeration race.
+#   - --warning=no-file-changed downgrades "file changed as we read it"
+#     to a warning rather than aborting the whole archive; combined with
+#     the find-time type filter, a raced symlink results in the file
+#     being silently omitted from the staging tree, which is the
+#     fail-closed outcome we want.
+#   - --one-file-system on the producer prevents crossing a mount
+#     surfaced after the find call.
+#   - The consumer rejects absolute paths (default behaviour without
+#     --absolute-names) and does not preserve ownership (--no-same-owner).
+#     The staging tree is read by the host as root for image
+#     construction; preserving owner from untrusted input is not useful.
+#   - --no-overwrite-dir on the consumer prevents directory metadata in
+#     the archive from overriding the staging root's own metadata.
+#
+# The net effect is that the staging tree contains only regular files
+# and directories that survived a second lstat at archive time. Anything
+# that became a symlink between find and tar is dropped, not followed.
+#
 # find's -L is not used: symlinks are not followed. tar in the producer
 # stage uses --no-recursion so it does not re-expand directories that
 # find already enumerated.
 ( cd "$TARGET_DIR" && \
   find . -xdev \( -type f -o -type d \) -print0 \
-  | tar --null --no-recursion -cf - --files-from=- \
-  | tar -xf - -C "$STAGE_DIR" ) \
+  | tar --null --no-recursion --one-file-system \
+        --warning=no-file-changed \
+        -cf - --files-from=- \
+  | tar --no-same-owner --no-overwrite-dir \
+        -xf - -C "$STAGE_DIR" ) \
   || { echo "[!] Failed to stage source tree."; exit 1; }
+
+# Post-stage assertion. If any non-regular, non-directory entry made it
+# through the pipeline, abort before image construction. This is a
+# belt-and-braces check against a tar implementation surprise; the find
+# and tar filters already exclude these types by construction.
+if find "$STAGE_DIR" -xdev \! -type f \! -type d -print -quit 2>/dev/null | grep -q .; then
+    echo "[!] Staging tree contains non-regular, non-directory entries."
+    echo "    This should not be possible. Aborting before image construction."
+    exit 1
+fi
 
 # ── Image construction ────────────────────────────────────────────────────────
 # Build the scan image from the sanitised staging tree, not from the

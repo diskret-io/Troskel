@@ -8,6 +8,14 @@
 #   - The mount call passes -t <fs> explicitly, eliminating the host
 #     kernel's filesystem autodetection path.
 #   - The mount uses -o ro,nodev,nosuid,noexec.
+#   - The mount is performed inside a private mount namespace (unshare
+#     -m --propagation private) so the file USB is invisible to the
+#     rest of the host and torn down with the namespace if the script
+#     dies mid scan. The scan-wrap invocation runs inside the same
+#     namespace.
+#   - After mount, the script refuses to proceed if anything under the
+#     mount root is itself a mountpoint (defence against a malicious
+#     filesystem image carrying nested mount sources).
 #
 # The hotplug auto-selection (tail -1) is preserved in this phase. The
 # explicit-selection rewrite lands with the ingest-VM work (Phase 2),
@@ -21,6 +29,16 @@ set -euo pipefail
 # even under the interim mitigation. Phase 2 moves filesystem detection
 # behind the ingest VM but does not widen this set.
 ALLOWED_FS=(ext4 vfat)
+
+# Re-exec into a private mount namespace if we are not already in one.
+# The TROSKEL_NS_ACTIVE sentinel prevents an unbounded re-exec loop.
+# --propagation private detaches the namespace's mounts from the host's
+# propagation tree so the file USB mount cannot leak back out, and the
+# namespace's mounts are torn down automatically when the script exits.
+if [ -z "${TROSKEL_NS_ACTIVE:-}" ]; then
+    export TROSKEL_NS_ACTIVE=1
+    exec unshare --mount --propagation private -- "$0" "$@"
+fi
 
 SCAN_DEV="${1:-}"
 if [ -z "$SCAN_DEV" ]; then
@@ -74,6 +92,20 @@ mount -t "$FS_TYPE" -o ro,nodev,nosuid,noexec "$SCAN_DEV" /mnt/usb \
     || { echo "[!] Failed to mount $SCAN_DEV as $FS_TYPE."; exit 1; }
 
 echo "[+] File USB mounted read-only (filesystem: $FS_TYPE)."
+
+# Nested-mountpoint refusal. A malicious filesystem image cannot create
+# kernel mountpoints by itself, but bind mounts or automounter activity
+# pre-existing on the host could surface under /mnt/usb. findmnt -R lists
+# the mountpoint and any submounts; more than one line means submounts
+# are present. Refuse rather than risk scanning content from a different
+# filesystem than the one we just validated.
+if [ "$(findmnt -Rno TARGET /mnt/usb 2>/dev/null | wc -l)" -gt 1 ]; then
+    echo "[!] Nested mountpoints detected under /mnt/usb."
+    echo "    The file USB or the host has surfaced a submount that"
+    echo "    bypasses the filesystem allowlist. Refusing to scan."
+    umount /mnt/usb 2>/dev/null || true
+    exit 1
+fi
 
 /usr/local/bin/scan-wrap /mnt/usb
 umount /mnt/usb 2>/dev/null || true
