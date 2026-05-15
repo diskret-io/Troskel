@@ -111,4 +111,4 @@ Also worth testing each threshold independently (stale ClamAV only, fresh YARA; 
 
 ---
 
-When any of these fails, capture the scan log and the hypervisor log (`/tmp/scan-wrap-*/fc-hypervisor.log`, before the cleanup trap fires — easiest is to add `set -x` to your `/tmp/scan-wrap` copy and rerun) and record the finding in `docs/MAINTENANCE.md`.
+When any of these fails, capture the scan log and the hypervisor log (`/tmp/scan-wrap-*/fc-hypervisor.log`, before the cleanup trap fires; easiest is to add `set -x` to your `/tmp/scan-wrap` copy and rerun).
