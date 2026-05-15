@@ -127,7 +127,7 @@ clean:
 # `make build`, `make scan`, and `make all` were renamed to make the test-
 # vs deliverable-producing distinction explicit. The old names continue
 # to work for one release with a deprecation warning, then will be
-# removed. See docs/roadmap/build-system-rationalisation.md.
+# removed.
 #
 # The warning is printed BEFORE the real target runs so the developer
 # sees it first in the output rather than after a five-minute build.

@@ -89,4 +89,4 @@ The boot USB rarely needs rewriting. Rewrite it only when:
 - The pinned CoreOS version in `config/versions.env` is bumped.
 - The scanning host passphrase needs to change. A new boot USB will print a fresh passphrase.
 
-The signature freshness gate is configured in `config/scanner.env` (`SIG_AGE_DAYS`, `YARA_AGE_DAYS`). When a data USB ages past the gate, `check-system-ready` on the scanning host will reject it; that is the operator's signal that a fresh data USB is needed.
+The signature freshness gate is configured in `config/scanner.env` (`CLAM_SIG_AGE_DAYS`, `LOKI_YARA_AGE_DAYS`). When a data USB ages past the gate, `check-system-ready` on the scanning host will reject it; that is the operator's signal that a fresh data USB is needed.

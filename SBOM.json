@@ -247,7 +247,7 @@
   ],
   "dependencies": [
     {
-      "ref": "pkg:generic/troskel@0.1.0",
+      "ref": "pkg:generic/troskel@0.9.0",
       "dependsOn": [
         "pkg:generic/fedora-coreos@stable",
         "pkg:github/firecracker-microvm/firecracker@v1.7.0",
