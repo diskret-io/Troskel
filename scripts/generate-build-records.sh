@@ -131,7 +131,7 @@ cat > "${SBOM_OUT}.new" <<JSON
         {
           "type": "application",
           "name": "troskel-build-records-generator",
-          "version": "1.0.0",
+          "version": "0.9.0",
           "vendor": "troskel-project",
           "description": "Generates SBOM.json and build-manifest.json from versions.env and build-station state. See scripts/generate-build-records.sh."
         }
@@ -140,11 +140,11 @@ cat > "${SBOM_OUT}.new" <<JSON
     "component": {
       "type": "application",
       "name": "troskel",
-      "version": "1.0.0",
+      "version": "0.9.0",
       "description": "Air-gapped file-crossing scanner",
       "supplier": {"name": "Diskret Team"},
       "licenses": [{"license": {"id": "MIT"}}],
-      "purl": "pkg:generic/troskel@1.0.0",
+      "purl": "pkg:generic/troskel@0.9.0",
       "properties": [
         {"name": "project-type", "value": "security-tool"},
         {"name": "deployment-model", "value": "air-gapped"},
@@ -368,7 +368,7 @@ cat > "${SBOM_OUT}.new" <<JSON
   ],
   "dependencies": [
     {
-      "ref": "pkg:generic/troskel@1.0.0",
+      "ref": "pkg:generic/troskel@0.9.0",
       "dependsOn": [
         "pkg:generic/fedora-coreos@stable",
         "pkg:github/firecracker-microvm/firecracker@${FC_VERSION}",
@@ -404,7 +404,7 @@ cat > "${SBOM_OUT}.new" <<JSON
   "compositions": [
     {
       "aggregate": "complete",
-      "assemblies": ["pkg:generic/troskel@1.0.0"],
+      "assemblies": ["pkg:generic/troskel@0.9.0"],
       "note": "Generated from versions.env and build-station state by scripts/generate-build-records.sh."
     }
   ],
