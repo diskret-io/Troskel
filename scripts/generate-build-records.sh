@@ -3,8 +3,8 @@
 # Produces two build records from the post-build state of the build station:
 #
 #   - SBOM.json at the repository root (CycloneDX 1.6 bill of materials).
-#   - /var/lib/troskel/build-manifest.json (per-build manifest, see
-#     docs/roadmap/build-manifest.md for the full schema).
+#   - /var/lib/troskel/build-manifest.json (per-build operational record;
+#     consumed by show-status on the scanning host).
 #
 # A single generator produces both because they read overlapping state
 # (versions.env, recorded SHA-256s, freshness dates, captured-at-download
@@ -160,7 +160,7 @@ cat > "${SBOM_OUT}.new" <<JSON
       "type": "operating-system",
       "name": "fedora-coreos",
       "version": "stable-stream",
-      "description": "CoreOS variant for scanning host. Tracks the 'stable' stream; the resolved version is not captured by this generator (see docs/roadmap/build-manifest.md open questions). ISO verified by coreos-installer against the Fedora signing key.",
+      "description": "CoreOS variant for scanning host. Tracks the 'stable' stream; the resolved version is not yet captured per build (planned hardening). ISO verified by coreos-installer against the Fedora signing key.",
       "supplier": {"name": "Fedora Project"},
       "licenses": [{"license": {"id": "GPL-2.0-only"}}],
       "purl": "pkg:generic/fedora-coreos@stable",
@@ -425,8 +425,7 @@ mv "${SBOM_OUT}.new" "$SBOM_OUT"
 echo "[+] SBOM written to ${SBOM_OUT}"
 
 # ── Build manifest emission ───────────────────────────────────────────────────
-# Per-build operational record. Schema documented in
-# docs/roadmap/build-manifest.md. The values overlap with the SBOM but
+# Per-build operational record. The values overlap with the SBOM but
 # the document's purpose is different: this is "what was in this build"
 # rather than "what can be in a build", and the readership is an admin
 # investigating a verdict rather than an auditor reviewing the project.
@@ -500,6 +499,3 @@ chmod 644 "$MANIFEST_OUT"
 echo "[+] Build manifest written to ${MANIFEST_OUT}"
 echo ""
 echo "[+] Build records ready."
-echo "    Troskel commit  : ${TROSKEL_COMMIT}"
-echo "    Tree clean      : $([ "$TROSKEL_DIRTY" = "false" ] && echo yes || echo NO — uncommitted changes)"
-echo "    YARA Forge tag  : ${YARA_FORGE_TAG}"
