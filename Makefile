@@ -10,11 +10,6 @@
 #   make test        Validate + test-build + test-scan in sequence.
 #   make clean       Remove the container image and build artefact volume.
 #
-# Deprecated aliases (will be removed in a future release):
-#   make build       -> make test-build
-#   make scan        -> make test-scan
-#   make all         -> make test
-#
 # Runtime:
 #   Docker is required.
 #
@@ -102,6 +97,10 @@ image: Dockerfile $(VERSIONS)
 	    --tag $(IMAGE_NAME) \
 	    .
 
+## Update scanning files
+update: image
+	$(RUN_PRIVILEGED) bash scripts/run-update.sh
+
 ## Tier 1 — Butane validation + shellcheck. No privileges needed.
 validate: image
 	$(RUN_BASE) bash tests/test-validate.sh
@@ -122,32 +121,3 @@ test: validate test-build test-scan
 clean:
 	$(RUNTIME) rmi $(IMAGE_NAME) 2>/dev/null || true
 	$(RUNTIME) volume rm $(VOLUME_NAME) 2>/dev/null || true
-
-# ── Deprecated aliases ────────────────────────────────────────────────────────
-# `make build`, `make scan`, and `make all` were renamed to make the test-
-# vs deliverable-producing distinction explicit. The old names continue
-# to work for one release with a deprecation warning, then will be
-# removed.
-#
-# The warning is printed BEFORE the real target runs so the developer
-# sees it first in the output rather than after a five-minute build.
-build:
-	@echo ""
-	@echo "[!] 'make build' is deprecated; use 'make test-build' instead."
-	@echo "    The old name will be removed in a future release."
-	@echo ""
-	@$(MAKE) --no-print-directory test-build
-
-scan:
-	@echo ""
-	@echo "[!] 'make scan' is deprecated; use 'make test-scan' instead."
-	@echo "    The old name will be removed in a future release."
-	@echo ""
-	@$(MAKE) --no-print-directory test-scan
-
-all:
-	@echo ""
-	@echo "[!] 'make all' is deprecated; use 'make test' instead."
-	@echo "    The old name will be removed in a future release."
-	@echo ""
-	@$(MAKE) --no-print-directory test

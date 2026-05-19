@@ -2,9 +2,9 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
   "version": 1,
-  "serialNumber": "urn:uuid:ba321194-e863-4801-844a-0a62660f9316",
+  "serialNumber": "urn:uuid:e7bfce0c-0752-4fa6-bb08-e9e9af306f9e",
   "metadata": {
-    "timestamp": "2026-05-12T13:43:24+00:00",
+    "timestamp": "2026-05-19T17:20:28+00:00",
     "tools": {
       "components": [
         {
@@ -27,8 +27,8 @@
       "properties": [
         {"name": "project-type", "value": "security-tool"},
         {"name": "deployment-model", "value": "air-gapped"},
-        {"name": "troskel-commit", "value": "215de009fb454f406cef6a7cbe2095b28efbe97c"},
-        {"name": "troskel-dirty", "value": "true"}
+        {"name": "troskel-commit", "value": "unknown"},
+        {"name": "troskel-dirty", "value": "false"}
       ]
     },
     "manufacture": {"name": "Diskret"},
@@ -39,7 +39,7 @@
       "type": "operating-system",
       "name": "fedora-coreos",
       "version": "stable-stream",
-"description": "CoreOS variant for scanning host. Tracks the 'stable' stream; the resolved version is not yet captured per build (planned hardening). ISO verified by coreos-installer against the Fedora signing key.",
+      "description": "CoreOS variant for scanning host. Tracks the 'stable' stream; the resolved version is not yet captured per build (planned hardening). ISO verified by coreos-installer against the Fedora signing key.",
       "supplier": {"name": "Fedora Project"},
       "licenses": [{"license": {"id": "GPL-2.0-only"}}],
       "purl": "pkg:generic/fedora-coreos@stable",
@@ -112,7 +112,7 @@
       "properties": [
         {"name": "update-frequency", "value": "daily"},
         {"name": "freshness-gate", "value": "30-days"},
-        {"name": "downloaded-at", "value": "2026-05-10T19:21:51+00:00"},
+        {"name": "downloaded-at", "value": "2026-05-19T17:17:48+00:00"},
         {"name": "verification-method", "value": "freshclam-embedded-keys"},
         {"name": "pin-category", "value": "FLOATING"}
       ]
@@ -154,16 +154,16 @@
     {
       "type": "file",
       "name": "yara-forge-core-rules",
-      "version": "unknown",
+      "version": "20260517",
       "description": "YARA Forge Core rule set for LOKI-RS. Floats with weekly upstream releases; the resolved tag and archive SHA-256 are captured here per build for reproducibility.",
       "supplier": {"name": "YARA Forge"},
-      "purl": "pkg:generic/yara-forge-core@unknown",
+      "purl": "pkg:generic/yara-forge-core@20260517",
       "externalReferences": [{"url": "https://github.com/YARAHQ/yara-forge", "type": "website"}],
-      "hashes": [{"alg": "SHA-256", "content": "unknown"}],
+      "hashes": [{"alg": "SHA-256", "content": "b0c76e9476ad240fb513553a67760a0971b37aa0a75aee92a0b4692ff7108138"}],
       "properties": [
         {"name": "update-method", "value": "scripts/download-loki-yara-rules.sh"},
         {"name": "curated", "value": "true"},
-        {"name": "downloaded-at", "value": "2026-05-11T18:26:37+00:00"},
+        {"name": "downloaded-at", "value": "2026-05-19T17:17:50+00:00"},
         {"name": "verification-method", "value": "tls-only"},
         {"name": "pin-category", "value": "FLOATING"}
       ]
@@ -230,13 +230,13 @@
     {
       "type": "firmware",
       "name": "vmlinux",
-      "version": "record-at-first-download",
+      "version": "vmlinux-6.1.77",
       "description": "Firecracker-compatible guest kernel. Pinned to the resolved filename within the FC_VERSION CI series via the record-at-first-download pattern.",
       "supplier": {"name": "AWS Firecracker"},
       "licenses": [{"license": {"id": "GPL-2.0-only"}}],
-      "purl": "pkg:generic/firecracker-vmlinux@unknown",
+      "purl": "pkg:generic/firecracker-vmlinux@vmlinux-6.1.77",
       "externalReferences": [{"url": "https://github.com/firecracker-microvm/firecracker", "type": "website"}],
-      "hashes": [{"alg": "SHA-256", "content": "unknown"}],
+      "hashes": [{"alg": "SHA-256", "content": "c29a3b3f1f99aea2a63cd5f73acf7036d493666c453324ed12621bf5d7bf7176"}],
       "properties": [
         {"name": "compatibility", "value": "firecracker-v1.7"},
         {"name": "interface", "value": "virtio-mmio"},
@@ -258,7 +258,7 @@
     },
     {
       "ref": "pkg:github/firecracker-microvm/firecracker@v1.7.0",
-      "dependsOn": ["pkg:generic/firecracker-vmlinux@unknown"]
+      "dependsOn": ["pkg:generic/firecracker-vmlinux@vmlinux-6.1.77"]
     },
     {
       "ref": "pkg:debian/clamav@trixie",
@@ -267,7 +267,7 @@
     {
       "ref": "pkg:github/Neo23x0/Loki-RS@v2.10.0",
       "dependsOn": [
-        "pkg:generic/yara-forge-core@unknown",
+        "pkg:generic/yara-forge-core@20260517",
         "pkg:github/Neo23x0/signature-base@v2.0"
       ]
     },
