@@ -1,6 +1,6 @@
 # Roadmap: capa as a third engine
 
-Capa adds detection diversity that ClamAV and LOKI-RS don't currently provide. The engines we already have are both pattern-based (signatures, YARA rules). Capa is *capability-based*, it identifies what an executable can do (network access, persistence, anti-analysis, credential theft, etc.) by combining file features with disassembly-derived behaviours. A genuinely orthogonal detection paradigm.
+Capa adds detection diversity that ClamAV and LOKI-RS don't currently provide. The engines we already have are both pattern-based (signatures, YARA rules). Capa is capability-based, it identifies what an executable can do (network access, persistence, anti-analysis, credential theft, etc.) by combining file features with disassembly-derived behaviours. A genuinely orthogonal detection paradigm.
 
 Source repos:
 - Engine: https://github.com/mandiant/capa

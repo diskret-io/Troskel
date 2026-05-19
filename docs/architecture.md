@@ -136,6 +136,6 @@ Bookworm was the initial candidate but ships glibc 2.36, which is below the 2.39
 
 - **Novel malware with no signature.** Green means no engine matched any known signature — not guaranteed clean.
 - **BadUSB / HID injection.** A malicious USB presenting as a keyboard could type commands. Physical control of the scanning room and operator training are the mitigations.
-- **Supply-chain compromise at the source.** Software components are integrity-verified at download (see SECURITY.md), which catches transit-level tampering and CDN corruption. An attacker who controls a signing key, or who can substitute artefacts on a CDN that publishes its own sidecars, defeats the verification at the source — no client-side mechanism can detect that.
+- **Supply-chain compromise at the source.** Software components are integrity-verified at download, which catches transit-level tampering and CDN corruption. An attacker who controls a signing key, or who can substitute artefacts on a CDN that publishes its own sidecars, defeats the verification at the source — no client-side mechanism can detect that.
 
 See [`docs/SECURITY.md`](SECURITY.md) for the full threat model and residual risk register.

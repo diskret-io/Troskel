@@ -85,7 +85,7 @@ The test fixtures are committed base64-encoded so developer AV scanners do not f
 
 ## About KVM
 
-KVM is the Linux kernel's virtualisation interface needed by Firecracker to run a real guest VM. Check it is available:
+KVM is the Linux kernel's virtualisation interface needed by Firecracker to run a real guest VM. Check it's available:
 
 ```bash
 ls -l /dev/kvm

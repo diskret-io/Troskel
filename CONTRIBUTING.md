@@ -44,7 +44,7 @@ git tag -a v0.2.0 -m "feat: parallel engine VM architecture"
 git push origin v0.2.0
 ```
 
-Use `v0.x.y` until the project is stable enough to call `v1.0.0`. A tag is a checkpoint, not a formal release; it does not need release notes at this stage.
+A tag is a checkpoint, not a formal release; it does not need release notes at this stage.
 
 ### Before committing
 
