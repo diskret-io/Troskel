@@ -46,6 +46,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         shellcheck \
         unzip \
         util-linux \
+        uuid-runtime \
         wget \
         xorriso \
     && rm -rf /var/lib/apt/lists/*
