@@ -109,10 +109,11 @@ echo "[*] Unmounting bind mounts before image creation..."
 # Must unmount /proc, /sys, and /dev before running mkfs.ext4 -d.
 # If still mounted, mkfs.ext4 tries to copy live /proc entries into the
 # image, causing "symlink increased in size" errors and build failure.
-umount -lf "${WORK}/proc"    2>/dev/null || true
-umount -lf "${WORK}/sys"     2>/dev/null || true
-umount -lf "${WORK}/dev/pts" 2>/dev/null || true
-umount -lf "${WORK}/dev"     2>/dev/null || true
+umount "${WORK}/proc"    2>/dev/null || true
+umount "${WORK}/sys"     2>/dev/null || true
+umount "${WORK}/dev/pts" 2>/dev/null || true
+umount "${WORK}/dev"     2>/dev/null || true
+sync
 
 echo "[*] Creating scanner image..."
 truncate -s "$SIZE" "$OUTPUT"

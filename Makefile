@@ -89,7 +89,7 @@ check-priv:
 
 ## Build the troskel-build container image.
 image: Dockerfile $(VERSIONS)
-	$(RUNTIME) build \
+	$(RUNTIME) build  --load \
 	    --build-arg FC_VERSION=$(FC_VERSION) \
 	    --build-arg BUTANE_VERSION=$(BUTANE_VERSION) \
 	    --build-arg LOKI_VERSION=$(LOKI_VERSION) \
