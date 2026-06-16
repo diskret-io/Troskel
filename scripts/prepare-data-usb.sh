@@ -45,6 +45,18 @@ echo "    WARNING: all data on ${USB_DEV} will be destroyed."
 read -r -p "    Continue? [y/N] " CONFIRM
 [[ "$CONFIRM" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
 
+# Release any handles on the device before destructive operations.
+# A desktop-environment auto-mounter may have mounted partitions on the
+# USB the moment it was inserted; udev may still be probing the device
+# after a recent insertion. Either condition makes wipefs fail with
+# "Device or resource busy". Unmount any partitions on the device (the
+# glob expands to /dev/sdX1, /dev/sdX2, etc.; the trailing ?* requires
+# at least one character so the parent device is not matched) and wait
+# for udev to settle before proceeding.
+echo "[*] Releasing device handles..."
+umount "${USB_DEV}"?* 2>/dev/null || true
+udevadm settle
+
 echo "[*] Formatting ${USB_DEV} with label TROSKEL-DATA..."
 wipefs -a "$USB_DEV"
 parted "$USB_DEV" --script mklabel gpt

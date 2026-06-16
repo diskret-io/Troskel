@@ -101,6 +101,17 @@ echo "    WARNING: all data on ${USB_DEV} will be destroyed."
 read -r -p "    Continue? [y/N] " CONFIRM
 [[ "$CONFIRM" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
 
+# Release any handles on the device before the dd write. A desktop-
+# environment auto-mounter may have mounted partitions on the USB the
+# moment it was inserted; udev may still be probing after a recent
+# insertion. Either condition causes dd to fail or, worse, succeed
+# while the kernel holds stale cached metadata that corrupts the
+# subsequent verify. Unmount any partitions on the device and wait
+# for udev to settle before writing.
+echo "[*] Releasing device handles..."
+umount "${USB_DEV}"?* 2>/dev/null || true
+udevadm settle
+
 dd if="$ISO" of="$USB_DEV" bs=4M status=progress
 sync
 

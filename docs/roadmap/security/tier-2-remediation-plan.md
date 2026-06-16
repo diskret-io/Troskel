@@ -183,7 +183,17 @@ Effort: two to three working days.
 
 The items below are recorded for completeness and to make explicit what Tier 2 readiness does *not* claim. They are the substance of any Tier 3 commitment (regulated critical infrastructure under IEC 62443 and NIS2) but are not promised here.
 
-Reproducible builds of the guest rootfs are the highest-value Tier 3 item: a bit-for-bit reproducible debootstrap with deterministic timestamps and ordering would close the residual supply-chain gap that signed-but-not-reproducible artefacts leave. The host ISO is a secondary target because it is largely unmodified CoreOS plus an Ignition embed; the rootfs is where reproducibility delivers proportionate value. In-toto attestations over the full build graph extend the SLSA-style provenance of Phase 1 from outputs-only to inputs-and-process. Hardware-backed release signing — an offline signing workstation or a hardware security module holding the release key — moves the build-station GPG key out of the file-system-resident trust path. Per-engine isolation, with each engine in its own Firecracker microVM, is on the project’s existing roadmap and addresses the within-guest cross-engine concern that the current single-VM design accepts. A TPM-backed monotonic counter on the scanning host, anchored across boots, would convert the operator-mediated freshness check of Phase 1 into a cryptographically enforced anti-rollback. A structured verdict-grammar implementation in a memory-safe language — Rust on the host side, replacing the relevant shell parsing in `scan-wrap` — would compound the grammar-discipline work of Phase 1 with implementation-language safety; this is worth doing for clarity but not for memory safety per se, since the host-side defects are not memory-safety defects.
+Reproducible builds of the guest rootfs are the highest-value Tier 3 item: a bit-for-bit reproducible debootstrap with deterministic timestamps and ordering would close the residual supply-chain gap that signed-but-not-reproducible artefacts leave. 
+
+The host ISO is a secondary target because it is largely unmodified CoreOS plus an Ignition embed; the rootfs is where reproducibility delivers proportionate value. In-toto attestations over the full build graph extend the SLSA-style provenance of Phase 1 from outputs-only to inputs-and-process. 
+
+Hardware-backed release signing — an offline signing workstation or a hardware security module holding the release key — moves the build-station GPG key out of the file-system-resident trust path.
+
+Per-engine isolation, with each engine in its own Firecracker microVM, is on the project’s existing roadmap and addresses the within-guest cross-engine concern that the current single-VM design accepts. 
+
+A TPM-backed monotonic counter on the scanning host, anchored across boots, would convert the operator-mediated freshness check of Phase 1 into a cryptographically enforced anti-rollback. 
+
+A structured verdict-grammar implementation in a memory-safe language — Rust on the host side, replacing the relevant shell parsing in `scan-wrap` — would compound the grammar-discipline work of Phase 1 with implementation-language safety; this is worth doing for clarity but not for memory safety per se, since the host-side defects are not memory-safety defects.
 
 Disposable microVM-based build stages for the most sensitive workflows (signing, release packaging) close the build-time compromise-amplification surface.
 
@@ -201,4 +211,4 @@ The operator workflow remains human-mediated and remains the boundary across whi
 
 The build-station compromise pathway is bounded by the Phase 1 provenance work to "compromise produces detectable artefacts" rather than "compromise is undetectable", but is not bounded to "compromise is impossible".
 
-These are the items a Tier 2 deployment must understand it is accepting. They are not defects of the plan; they are the shape of what Tier 2, as distinct from Tier 3, commits to.
+These are the items a Tier 2 deployment must understand it is accepting.

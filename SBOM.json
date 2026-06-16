@@ -2,9 +2,9 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
   "version": 1,
-  "serialNumber": "urn:uuid:97e53fc6-4bd5-4abd-b56b-bfe55b113ffa",
+  "serialNumber": "urn:uuid:7159d45a-72d3-410d-a0c7-02ccfd617ebd",
   "metadata": {
-    "timestamp": "2026-05-21T12:26:20+00:00",
+    "timestamp": "2026-06-16T16:42:23+00:00",
     "tools": {
       "components": [
         {
@@ -112,7 +112,7 @@
       "properties": [
         {"name": "update-frequency", "value": "daily"},
         {"name": "freshness-gate", "value": "30-days"},
-        {"name": "downloaded-at", "value": "2026-05-21T12:25:20+00:00"},
+        {"name": "downloaded-at", "value": "2026-06-16T16:37:40+00:00"},
         {"name": "verification-method", "value": "freshclam-embedded-keys"},
         {"name": "pin-category", "value": "FLOATING"}
       ]
@@ -154,16 +154,16 @@
     {
       "type": "file",
       "name": "yara-forge-core-rules",
-      "version": "20260517",
+      "version": "20260614",
       "description": "YARA Forge Core rule set for LOKI-RS. Floats with weekly upstream releases; the resolved tag and archive SHA-256 are captured here per build for reproducibility.",
       "supplier": {"name": "YARA Forge"},
-      "purl": "pkg:generic/yara-forge-core@20260517",
+      "purl": "pkg:generic/yara-forge-core@20260614",
       "externalReferences": [{"url": "https://github.com/YARAHQ/yara-forge", "type": "website"}],
-      "hashes": [{"alg": "SHA-256", "content": "b0c76e9476ad240fb513553a67760a0971b37aa0a75aee92a0b4692ff7108138"}],
+      "hashes": [{"alg": "SHA-256", "content": "defddf8fb75c9670bc76fa5b9d490cc9ffca2f8c688161bc84701a19a806a69a"}],
       "properties": [
         {"name": "update-method", "value": "scripts/download-loki-yara-rules.sh"},
         {"name": "curated", "value": "true"},
-        {"name": "downloaded-at", "value": "2026-05-21T12:25:22+00:00"},
+        {"name": "downloaded-at", "value": "2026-06-16T16:37:43+00:00"},
         {"name": "verification-method", "value": "tls-only"},
         {"name": "pin-category", "value": "FLOATING"}
       ]
@@ -267,7 +267,7 @@
     {
       "ref": "pkg:github/Neo23x0/Loki-RS@v2.10.0",
       "dependsOn": [
-        "pkg:generic/yara-forge-core@20260517",
+        "pkg:generic/yara-forge-core@20260614",
         "pkg:github/Neo23x0/signature-base@v2.0"
       ]
     },
