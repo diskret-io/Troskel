@@ -3,10 +3,14 @@ id: "negative-case-test-sidecar-2026-06-16"
 status: "todo"
 priority: "high"
 assignee: "k"
+epic: null
+dueDate: null
+created: "2026-06-16T18:25:11.782Z"
+modified: "2026-06-16T18:25:11.782Z"
+completedAt: null
 labels: ["tests", "quality", "security"]
-order: 0
+order: "a4"
 ---
-
 # Negative-case test: sidecar verify catches USB corruption
 
 The sidecar bug just fixed went undetected because the test suite

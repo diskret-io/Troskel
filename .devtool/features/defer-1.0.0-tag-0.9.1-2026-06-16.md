@@ -3,10 +3,14 @@ id: "defer-1.0.0-tag-0.9.1-2026-06-16"
 status: "todo"
 priority: "high"
 assignee: "k"
+epic: null
+dueDate: null
+created: "2026-06-16T18:25:11.762Z"
+modified: "2026-06-16T18:25:11.762Z"
+completedAt: null
 labels: ["docs", "infra"]
-order: 0
+order: "a1"
 ---
-
 # Defer 1.0.0 tag; ship 0.9.1 with bugfixes
 
 The 1.0.0 plan defined the tag as a documentation and polish

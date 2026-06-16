@@ -98,19 +98,66 @@ $COREOS_INSTALLER iso ignition embed \
 
 echo "[*] Writing to ${USB_DEV}..."
 echo "    WARNING: all data on ${USB_DEV} will be destroyed."
-read -r -p "    Continue? [y/N] " CONFIRM
-[[ "$CONFIRM" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
 
-# Release any handles on the device before the dd write. A desktop-
-# environment auto-mounter may have mounted partitions on the USB the
-# moment it was inserted; udev may still be probing after a recent
-# insertion. Either condition causes dd to fail or, worse, succeed
-# while the kernel holds stale cached metadata that corrupts the
-# subsequent verify. Unmount any partitions on the device and wait
-# for udev to settle before writing.
+# Confirmation prompt. Skipped when invoked by the orchestrator
+# (troskel-build.sh sets TROSKEL_CONFIRMED=1 after the operator has
+# confirmed the device assignment in Phase 1). When invoked directly
+# the operator gets the safety prompt as usual.
+if [ "${TROSKEL_CONFIRMED:-0}" = "1" ]; then
+    echo "    (Confirmation from orchestrator: TROSKEL_CONFIRMED=1)"
+else
+    read -r -p "    Continue? [y/N] " CONFIRM
+    [[ "$CONFIRM" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
+fi
+
+# Release any handles on the device before the dd write and verify the
+# release actually happened. This block has a contract with the
+# orchestrator: if the device cannot be released, we abort non-zero
+# with a diagnostic naming what is holding it. We do NOT swallow the
+# failure with `|| true`, because dd against a busy device either
+# fails or, worse, succeeds against a stale page-cache view.
+#
+# A desktop-environment auto-mounter (gnome-volume-monitor, udisks2)
+# may have mounted partitions on the USB the moment it was inserted;
+# udev may still be probing after a recent insertion.
 echo "[*] Releasing device handles..."
-umount "${USB_DEV}"?* 2>/dev/null || true
+
+# Attempt to unmount any partition on this device. Individual umount
+# failures here are not yet fatal; the verification below is.
+for PART in "${USB_DEV}"?*; do
+    [ -b "$PART" ] || continue
+    while MNT="$(findmnt -no TARGET --source "$PART" 2>/dev/null | head -1)"; do
+        [ -n "$MNT" ] || break
+        umount "$MNT" 2>/dev/null || umount -l "$MNT" 2>/dev/null || break
+    done
+done
 udevadm settle
+
+# Verify: if anything on this device is still mounted, abort with a
+# diagnostic naming the offending mount and (where possible) the
+# process holding it.
+STILL_MOUNTED="$(findmnt -no TARGET,SOURCE \
+    | awk -v dev="$(basename "$USB_DEV")" '$2 ~ dev {print}')"
+if [ -n "$STILL_MOUNTED" ]; then
+    echo "[!] Cannot release ${USB_DEV} — partitions still mounted:" >&2
+    echo "$STILL_MOUNTED" | sed 's/^/      /' >&2
+    echo "" >&2
+    if command -v fuser >/dev/null 2>&1; then
+        echo "    Processes holding mounts on ${USB_DEV}:" >&2
+        for PART in "${USB_DEV}"?*; do
+            [ -b "$PART" ] || continue
+            fuser -vm "$PART" 2>&1 | sed 's/^/      /' >&2 || true
+        done
+    elif command -v lsof >/dev/null 2>&1; then
+        echo "    Processes with open files on ${USB_DEV}:" >&2
+        lsof "$USB_DEV"?* 2>/dev/null | sed 's/^/      /' >&2 || true
+    fi
+    echo "" >&2
+    echo "    Close any file managers showing the USB, exit any" >&2
+    echo "    terminals cd'd into its mount, or unplug and replug" >&2
+    echo "    the device. Then re-run this command." >&2
+    exit 1
+fi
 
 dd if="$ISO" of="$USB_DEV" bs=4M status=progress
 sync

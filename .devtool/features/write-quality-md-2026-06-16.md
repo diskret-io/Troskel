@@ -3,10 +3,14 @@ id: "write-quality-md-2026-06-16"
 status: "todo"
 priority: "high"
 assignee: "k"
+epic: null
+dueDate: null
+created: "2026-06-16T18:25:11.794Z"
+modified: "2026-06-16T18:25:11.794Z"
+completedAt: null
 labels: ["quality", "docs"]
-order: 0
+order: "a5"
 ---
-
 # Write docs/QUALITY.md
 
 A short document capturing the project's quality bar. Read by future

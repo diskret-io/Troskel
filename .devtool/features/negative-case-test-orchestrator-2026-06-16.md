@@ -3,10 +3,14 @@ id: "negative-case-test-orchestrator-2026-06-16"
 status: "todo"
 priority: "high"
 assignee: "k"
+epic: null
+dueDate: null
+created: "2026-06-16T18:25:11.779Z"
+modified: "2026-06-16T18:25:11.779Z"
+completedAt: null
 labels: ["tests", "quality", "security"]
-order: 0
+order: "a3"
 ---
-
 # Negative-case test: orchestrator propagates inner-script failures
 
 The orchestrator silently reported success against an inner script

@@ -3,10 +3,14 @@ id: "ci-surface-pipeline-2026-06-16"
 status: "todo"
 priority: "high"
 assignee: "k"
+epic: null
+dueDate: null
+created: "2026-06-16T18:25:11.759Z"
+modified: "2026-06-16T18:25:11.759Z"
+completedAt: null
 labels: ["infra", "quality"]
-order: 0
+order: "a0"
 ---
-
 # Surface CI pipeline state explicitly
 
 Project conventions describe a three-tier CI (validate on PRs,

@@ -1,12 +1,16 @@
 ---
 id: "extend-system-prompt-quality-bar-2026-06-16"
-status: "todo"
+status: "in-progress"
 priority: "high"
 assignee: "k"
+epic: null
+dueDate: null
+created: "2026-06-16T18:25:11.766Z"
+modified: "2026-06-16T19:56:40.578Z"
+completedAt: null
 labels: ["quality", "docs"]
-order: 0
+order: "a0"
 ---
-
 # Extend system prompt with quality-bar rules
 
 The current Troskel project instructions cover communication style,

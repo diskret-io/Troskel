@@ -3,10 +3,14 @@ id: "rewrite-verification-protocol-2026-06-16"
 status: "backlog"
 priority: "medium"
 assignee: "k"
+epic: null
+dueDate: null
+created: "2026-06-16T18:25:11.791Z"
+modified: "2026-06-16T18:25:11.791Z"
+completedAt: null
 labels: ["refactor", "quality", "security"]
-order: 0
+order: "a1"
 ---
-
 # Rewrite verification protocol as isolated module
 
 The sidecar produce/verify/re-verify protocol currently lives across

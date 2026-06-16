@@ -3,10 +3,14 @@ id: "loki-ioc-regex-compatibility-2026-06-16"
 status: "backlog"
 priority: "medium"
 assignee: "k"
+epic: null
+dueDate: null
+created: "2026-06-16T18:25:11.776Z"
+modified: "2026-06-16T18:25:11.776Z"
+completedAt: null
 labels: ["bug", "infra"]
-order: 0
+order: "a0"
 ---
-
 # LOKI-RS regex parse errors against signature-base IOCs
 
 `make test` surfaces LOKI-RS `[ERROR]` lines about invalid regex

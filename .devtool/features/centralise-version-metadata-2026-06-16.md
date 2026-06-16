@@ -3,10 +3,14 @@ id: "centralise-version-metadata-2026-06-16"
 status: "backlog"
 priority: "low"
 assignee: "k"
+epic: null
+dueDate: null
+created: "2026-06-16T18:25:11.756Z"
+modified: "2026-06-16T18:25:11.756Z"
+completedAt: null
 labels: ["refactor", "docs"]
-order: 2
+order: "a3"
 ---
-
 # Centralise version metadata
 
 Project version currently lives in seven string locations across

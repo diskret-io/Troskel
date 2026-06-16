@@ -3,10 +3,14 @@ id: "orchestrator-progress-rewrite-2026-06-16"
 status: "backlog"
 priority: "medium"
 assignee: "k"
+epic: null
+dueDate: null
+created: "2026-06-16T18:25:11.785Z"
+modified: "2026-06-16T18:25:11.785Z"
+completedAt: null
 labels: ["refactor", "infra"]
-order: 1
+order: "a2"
 ---
-
 # Orchestrator progress reporting rewrite
 
 The `troskel-build.sh` orchestrator captures inner-script output
