@@ -31,12 +31,10 @@
 # falsely reported success.
 #
 # Invocation: `bash tests/test-usb-verify.sh` (no privilege needed;
-# no real device touched). Also runnable inside the troskel-build
-# container, where it can be wired into make test-build.
+# no real device touched). Also wired into tests/test-build.sh so
+# it runs as part of `make test-build` inside the troskel-build
+# container.
 set -euo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # Self-contained: this test only needs sha256sum and basic shell. It
 # does not require root, a container, real block devices, or

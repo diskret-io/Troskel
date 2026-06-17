@@ -26,6 +26,7 @@
 #      silent-success failure mode. Stage must fail; surfacing this
 #      is the test's primary purpose.
 #   4. Happy path with passing POSTCOND. Both signals must agree.
+#   5. POSTCOND one-shot (does not leak to next call).
 #
 # Invocation: `bash tests/test-run-step.sh` (no privilege needed;
 # no real files touched beyond mktemp scratch space).
@@ -34,6 +35,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 LIB_FILE="${PROJECT_ROOT}/scripts/lib/run-step.sh"
+
+# shellcheck source=../scripts/lib/run-step.sh
+# The directive above tells shellcheck where to find the file we
+# source in the subshells below; the subshells use the $LIB_FILE
+# variable for clarity but shellcheck cannot follow a variable, so
+# the directive resolves the path statically. Applies to all
+# `source "$LIB_FILE"` lines further down.
 
 [ -f "$LIB_FILE" ] || {
     echo "[!] Library not found: $LIB_FILE" >&2
@@ -49,10 +57,10 @@ fail() { echo "[!] $*" >&2; exit 1; }
 # the test. We capture the subshell's combined output and exit code
 # separately so assertions can examine both.
 #
-# The pattern: run the subshell with the library sourced and
-# DEBUG=0 (or 1 where the test specifies), execute run_step against
-# a known input, capture stdout/stderr to a tempfile and the exit
-# code into a variable. Then assert on both.
+# DEBUG is set inside each subshell because the sourced library
+# reads it. shellcheck does not see that consumption because the
+# library is sourced via a variable path, so we suppress SC2034
+# per use.
 
 # ── Test 1: happy path ───────────────────────────────────────────────────────
 
@@ -61,6 +69,7 @@ step "Test 1: happy path (sub-script exits zero, no POSTCOND)"
 OUT_FILE="$(mktemp)"
 RC=0
 (
+    # shellcheck disable=SC2034
     DEBUG=0
     # shellcheck source=../scripts/lib/run-step.sh
     source "$LIB_FILE"
@@ -87,7 +96,9 @@ step "Test 2: sub-script exits non-zero"
 OUT_FILE="$(mktemp)"
 RC=0
 (
+    # shellcheck disable=SC2034
     DEBUG=0
+    # shellcheck source=../scripts/lib/run-step.sh
     source "$LIB_FILE"
     # Use a command that exits non-zero with output on stderr, so we
     # can also verify the output is surfaced.
@@ -123,7 +134,9 @@ step "Test 3: silent-success failure mode (POSTCOND catches it)"
 OUT_FILE="$(mktemp)"
 RC=0
 (
+    # shellcheck disable=SC2034
     DEBUG=0
+    # shellcheck source=../scripts/lib/run-step.sh
     source "$LIB_FILE"
     # The "sub-script" succeeds (exit 0) but does no observable work.
     # The post-condition checks whether work happened and reports the
@@ -161,7 +174,9 @@ step "Test 4: happy path with passing POSTCOND (both signals agree)"
 OUT_FILE="$(mktemp)"
 RC=0
 (
+    # shellcheck disable=SC2034
     DEBUG=0
+    # shellcheck source=../scripts/lib/run-step.sh
     source "$LIB_FILE"
     passing_postcond() {
         return 0
@@ -189,7 +204,9 @@ step "Test 5: POSTCOND is one-shot (does not leak to next call)"
 OUT_FILE="$(mktemp)"
 RC=0
 (
+    # shellcheck disable=SC2034
     DEBUG=0
+    # shellcheck source=../scripts/lib/run-step.sh
     source "$LIB_FILE"
     failing_postcond() {
         return 1
@@ -203,9 +220,6 @@ RC=0
     # subshell. The robust assertion is on the unset itself:
     # source the library, set POSTCOND, run a passing stage, then
     # assert POSTCOND is unset after the call.
-    POSTCOND=failing_postcond
-    # Use a passing command and a passing-postcond context, but
-    # set POSTCOND before run_step is invoked.
     POSTCOND=failing_postcond
     # Override the function name to a passing one for this test:
     failing_postcond() { return 0; }
