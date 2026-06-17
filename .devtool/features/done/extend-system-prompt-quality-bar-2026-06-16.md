@@ -9,7 +9,7 @@ created: "2026-06-16T18:25:11.766Z"
 modified: "2026-06-17T12:41:36.131Z"
 completedAt: "2026-06-17T12:41:36.131Z"
 labels: ["quality", "docs"]
-order: "Zy"
+order: "a2"
 ---
 # Extend system prompt with quality-bar rules
 

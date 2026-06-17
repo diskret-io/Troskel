@@ -32,9 +32,9 @@ See [`SECURITY.md`](SECURITY.md) for the threat model and known limits of signat
 
 **Linux required.** Both the build station and the scanning host run Linux. macOS and Windows are not supported.
 
-The build station needs Docker, and the scan tests need access to `/dev/kvm` for Firecracker. `/dev/kvm` is a Linux kernel facility; Docker Desktop on macOS and Windows runs containers inside its own Linux VM and does not expose host-level KVM, so `make test-scan` cannot work outside Linux even with Docker installed. The scanning host is itself Linux-only (CoreOS), and the artefacts the build station produces (Linux binaries, ext4 filesystems, Ignition configs) only make sense on a Linux target.
+The build station needs Docker, and the scan tests need access to `/dev/kvm` for Firecracker. `/dev/kvm` is a Linux kernel facility. 
 
-There is no plan to support cross-platform builds. Use a Linux VM if you need to develop on macOS or Windows.
+The scanning host is itself Linux-only (CoreOS), and the artefacts the build station produces (Linux binaries, ext4 filesystems, Ignition configs) only make sense on a Linux target.
 
 ## How it works
 

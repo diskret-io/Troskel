@@ -9,7 +9,7 @@ created: "2026-06-16T18:25:11.782Z"
 modified: "2026-06-17T13:19:23.439Z"
 completedAt: "2026-06-17T13:19:23.439Z"
 labels: ["tests", "quality", "security"]
-order: "Zx"
+order: "a5"
 ---
 # Negative-case test: sidecar verify catches USB corruption
 

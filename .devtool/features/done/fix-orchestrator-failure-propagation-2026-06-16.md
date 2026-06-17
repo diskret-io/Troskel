@@ -9,7 +9,7 @@ created: "2026-06-16T18:25:11.769Z"
 modified: "2026-06-16T19:50:13.923Z"
 completedAt: "2026-06-16T19:50:13.923Z"
 labels: ["bug", "security", "infra"]
-order: "a0"
+order: "a3"
 ---
 # Orchestrator hides write failures from inner scripts
 
