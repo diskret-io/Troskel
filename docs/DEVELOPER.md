@@ -81,7 +81,7 @@ Two end-to-end scans against the rootfs produced by Tier 2:
 - **Red.** Scans `tests/files/EICAR.txt` plus a known encrypted ZIP. Expects a `THREAT DETECTED` verdict with both ClamAV and LOKI-RS reporting `status=threat`, and confirms the ClamAV `--alert-encrypted-archive` flag fired against the encrypted ZIP.
 - **Green.** Scans a directory containing one benign text file. Expects a `CLEAN` verdict.
 
-The test fixtures are committed base64-encoded so developer AV scanners do not flag the repo. See [`../tests/files/README.md`](../tests/files/README.md) for the fixtures and regeneration recipes.
+The test fixtures are committed base64-encoded so developer AV scanners do not flag the repo. See [tests README](../tests/files/README.md) for the fixtures and regeneration recipes.
 
 ## About KVM
 

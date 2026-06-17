@@ -50,7 +50,7 @@ PRIV_FLAGS := --privileged
 # treated as the command to run inside the container.
 RUN_FLAGS_BASE := run --rm \
     --volume "$(CURDIR):/troskel:z" \
-    --volume "$(VOLUME_NAME):/var/lib/troskel:z" \
+    --volume "/var/lib/troskel:/var/lib/troskel:z" \
     --workdir /troskel
 
 RUN_BASE           := $(RUNTIME) $(RUN_FLAGS_BASE) $(IMAGE_NAME)

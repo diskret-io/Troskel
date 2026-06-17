@@ -23,19 +23,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/../config/versions.env"
 
-# ── Colour helpers ────────────────────────────────────────────────────────────
-# Only emit colour codes if stdout is a terminal.
-if [ -t 1 ]; then
-    C_RESET='\033[0m'
-    C_BOLD='\033[1m'
-    C_GREEN='\033[0;32m'
-    C_YELLOW='\033[0;33m'
-    C_RED='\033[0;31m'
-    C_CYAN='\033[0;36m'
-    C_DIM='\033[2m'
-else
-    C_RESET='' C_BOLD='' C_GREEN='' C_YELLOW='' C_RED='' C_CYAN='' C_DIM=''
-fi
+# Shared stage runner and UI helpers. Lives in scripts/lib/run-step.sh
+# so that tests/test-run-step.sh can exercise the same function this
+# orchestrator uses, with no risk of the two implementations drifting.
+# See scripts/lib/run-step.sh header for the function contract.
+source "${SCRIPT_DIR}/lib/run-step.sh"
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 USB_MODE="all"        # all | data | boot
@@ -60,43 +52,85 @@ for arg in "$@"; do
     esac
 done
 
-# ── Output helpers ────────────────────────────────────────────────────────────
-header() {
-    echo ""
-    echo -e "${C_BOLD}${C_CYAN}══ $* ══${C_RESET}"
+# ── Post-condition helpers ────────────────────────────────────────────────────
+# Each writes its diagnostic to stderr on failure and returns non-zero.
+# Kept small so the failure mode they detect is obvious; combine
+# multiple post-conditions in a wrapper if a stage needs more than one
+# check.
+
+# Mount the data USB read-only, confirm scanner-rootfs.ext4 is present
+# and non-empty, unmount, return success. This is the lightweight
+# "did anything get written" check; the deeper checksum verification
+# lives in Phase 5.
+postcond_data_usb_written() {
+    local DEV="${DATA_DEV:?postcond_data_usb_written needs DATA_DEV}"
+    local PART="${DEV}1"
+    [ -b "${DEV}p1" ] && PART="${DEV}p1"
+    local M
+    M="$(mktemp -d)"
+    if ! mount -o ro "$PART" "$M" 2>/dev/null; then
+        echo "[!] Data USB partition ${PART} did not mount post-write." >&2
+        rm -rf "$M"
+        return 1
+    fi
+    local RC=0
+    if [ ! -s "$M/scanner-rootfs.ext4" ]; then
+        echo "[!] Data USB does not contain scanner-rootfs.ext4 post-write." >&2
+        RC=1
+    fi
+    umount "$M" 2>/dev/null || true
+    rm -rf "$M"
+    return "$RC"
 }
 
-progress() { echo -e "  ${C_DIM}▸${C_RESET} $*"; }
-ok()       { echo -e "  ${C_GREEN}✓${C_RESET} $*"; }
-warn()     { echo -e "  ${C_YELLOW}⚠${C_RESET}  $*"; }
-fail()     { echo -e "  ${C_RED}✗${C_RESET} $*"; }
+# For the boot USB the post-condition is "the first 512 bytes of the
+# device do not look like the pre-existing filesystem". We compare the
+# MBR signature against what blkid reports the device contains: after
+# dd of a CoreOS ISO, blkid should report iso9660 (the ISO carries an
+# iso9660 signature) or "" (some Fedora ISOs scrub this); before dd,
+# blkid reported whatever the previous content was. The cheapest
+# usable post-condition is "the device's filesystem signature now
+# matches the ISO's", which we approximate by re-reading blkid and
+# requiring it to be iso9660 or empty.
+postcond_boot_usb_written() {
+    local DEV="${BOOT_DEV:?postcond_boot_usb_written needs BOOT_DEV}"
+    udevadm settle
+    local FS
+    FS="$(blkid -s TYPE -o value "$DEV" 2>/dev/null || true)"
+    case "$FS" in
+        iso9660|"") return 0 ;;
+        *)
+            echo "[!] Boot USB ${DEV} filesystem signature is '${FS}', expected iso9660." >&2
+            echo "    The dd write may not have completed; the device still appears" >&2
+            echo "    to carry its previous content." >&2
+            return 1
+            ;;
+    esac
+}
 
-# Run a sub-script. In normal mode suppress its output and show a
-# single progress/ok line. In debug mode stream everything.
-run_step() {
-    local LABEL="$1"; shift
-    progress "${LABEL}..."
-    if [ "$DEBUG" -eq 1 ]; then
-        "$@"
-    else
-        local OUT
-        OUT="$(mktemp)"
-        if "$@" > "$OUT" 2>&1; then
-            ok "$LABEL"
-            rm -f "$OUT"
-        else
-            fail "$LABEL"
-            echo ""
-            echo -e "${C_DIM}--- output ---${C_RESET}"
-            cat "$OUT"
-            echo -e "${C_DIM}--------------${C_RESET}"
-            rm -f "$OUT"
-            echo ""
-            echo -e "${C_RED}Build failed at: ${LABEL}${C_RESET}"
-            echo "  Run with --debug for full output."
-            exit 1
-        fi
+# Verify data USB checksums by re-mounting and checking. Defined as a
+# named function rather than an inline expression so the failure mode
+# is explicit at each step rather than buried in a chain of `&& ... ||`.
+# Called via run_step at Phase 5.
+verify_data_usb_checksums() {
+    local DATA_PART="${DATA_DEV}1"
+    [ -b "${DATA_DEV}p1" ] && DATA_PART="${DATA_DEV}p1"
+    local VMOUNT
+    VMOUNT="$(mktemp -d)"
+    if ! mount -o ro "$DATA_PART" "$VMOUNT" 2>/dev/null; then
+        echo "[!] Could not mount ${DATA_PART} for verification." >&2
+        rm -rf "$VMOUNT"
+        return 1
     fi
+    local RC=0
+    if ! ( cd "$VMOUNT" && sha256sum --check scanner-rootfs.ext4.sha256 ); then
+        echo "[!] Checksum verification failed — do not use this USB." >&2
+        RC=1
+    fi
+    cd / 2>/dev/null || true
+    umount "$VMOUNT" 2>/dev/null || true
+    rm -rf "$VMOUNT"
+    return "$RC"
 }
 
 # ── Phase 0: Runtime detection ────────────────────────────────────────────────
@@ -292,6 +326,16 @@ fi
 # ── Phase 4: Write USBs ───────────────────────────────────────────────────────
 header "Writing USBs"
 
+# Inner scripts (prepare-data-usb.sh, prepare-boot-usb.sh) carry their
+# own "Continue? [y/N]" confirmation prompt as a safety net for direct
+# invocation outside the orchestrator. The orchestrator already
+# obtained operator confirmation in Phase 1 (device assignment), so
+# the inner prompts would re-ask the same question against captured
+# stdin. We signal "already confirmed" via the environment so the
+# inner scripts skip their own prompt; direct invocation outside the
+# orchestrator (without this env var set) gets the prompt as usual.
+export TROSKEL_CONFIRMED=1
+
 # Capture passphrase output from prepare-boot-usb.sh so we can display
 # it prominently in the final summary rather than buried in scroll.
 PASSPHRASE_FILE="$(mktemp)"
@@ -299,45 +343,111 @@ trap 'rm -f "$PASSPHRASE_FILE"' EXIT
 
 if [ "$USB_MODE" = "all" ] || [ "$USB_MODE" = "data" ]; then
     DATA_DEV="${ROLE_ASSIGNMENT[TROSKEL-DATA]}"
-    run_step "Writing TROSKEL-DATA (${DATA_DEV})" \
+    POSTCOND=postcond_data_usb_written run_step \
+        "Writing TROSKEL-DATA (${DATA_DEV})" \
         bash "${SCRIPT_DIR}/prepare-data-usb.sh" "$DATA_DEV"
 fi
 
+# Boot USB write uses a hand-rolled wrapper rather than run_step because
+# we need to extract the passphrase block from the captured output before
+# disposing of it. The wrapper otherwise follows the same shape as
+# run_step and shares the same failure-mode discipline: explicit exit
+# code propagation, post-condition check, captured output dumped on
+# failure.
 if [ "$USB_MODE" = "all" ] || [ "$USB_MODE" = "boot" ]; then
     BOOT_DEV="${ROLE_ASSIGNMENT[TROSKEL-BOOT]}"
     progress "Writing TROSKEL-BOOT (${BOOT_DEV})..."
     if [ "$DEBUG" -eq 1 ]; then
-        bash "${SCRIPT_DIR}/prepare-boot-usb.sh" "$BOOT_DEV"
-    else
-        OUT="$(mktemp)"
-        if bash "${SCRIPT_DIR}/prepare-boot-usb.sh" "$BOOT_DEV" > "$OUT" 2>&1; then
-            ok "TROSKEL-BOOT written (${BOOT_DEV})"
-            # Extract the passphrase block from prepare-boot-usb.sh output.
-            sed -n '/SCANNER PASSPHRASE/,/======/p' "$OUT" > "$PASSPHRASE_FILE"
-            rm -f "$OUT"
-        else
+        if ! bash "${SCRIPT_DIR}/prepare-boot-usb.sh" "$BOOT_DEV"; then
             fail "TROSKEL-BOOT write failed"
-            cat "$OUT"; rm -f "$OUT"
             exit 1
         fi
+        if ! postcond_boot_usb_written; then
+            fail "TROSKEL-BOOT — post-condition failed"
+            exit 1
+        fi
+        ok "TROSKEL-BOOT written (${BOOT_DEV})"
+    else
+        OUT="$(mktemp)"
+        if ! bash "${SCRIPT_DIR}/prepare-boot-usb.sh" "$BOOT_DEV" > "$OUT" 2>&1; then
+            fail "TROSKEL-BOOT write failed"
+            echo ""
+            echo -e "${C_DIM}--- output ---${C_RESET}"
+            cat "$OUT"
+            echo -e "${C_DIM}--------------${C_RESET}"
+            rm -f "$OUT"
+            exit 1
+        fi
+        if ! postcond_boot_usb_written; then
+            fail "TROSKEL-BOOT — post-condition failed"
+            echo ""
+            echo -e "${C_DIM}--- output ---${C_RESET}"
+            cat "$OUT"
+            echo -e "${C_DIM}--------------${C_RESET}"
+            rm -f "$OUT"
+            echo ""
+            echo "  The sub-script exited zero but the boot USB does not carry"
+            echo "  the expected iso9660 signature. The dd write did not take effect."
+            exit 1
+        fi
+        ok "TROSKEL-BOOT written (${BOOT_DEV})"
+        # Extract the passphrase from prepare-boot-usb.sh output. The
+        # boot script's output contains a banner block:
+        #
+        #     ============================================================
+        #       SCANNER PASSPHRASE — RECORD THIS NOW
+        #     ============================================================
+        #
+        #         <four-word-passphrase>
+        #
+        #       <explanatory text...>
+        #     ============================================================
+        #
+        # We want the passphrase line (and only that line). The awk
+        # state machine: enter header mode on the title line, switch to
+        # passphrase mode on the banner that closes the header, exit on
+        # the banner that closes the passphrase block. Non-empty lines
+        # in passphrase mode (skipping the explanatory paragraph) are
+        # captured. The explanatory text starts with two-space-indented
+        # words; the passphrase line starts with four-space-indented
+        # text and contains no spaces inside the value. We capture only
+        # the first non-empty line in passphrase mode, which is the
+        # passphrase itself.
+        awk '
+            /SCANNER PASSPHRASE/        { in_header=1; next }
+            in_header && /^====/        { in_header=0; in_pass=1; next }
+            in_pass && /^====/          { exit }
+            in_pass && NF && !captured  { print $0; captured=1 }
+        ' "$OUT" > "$PASSPHRASE_FILE"
+
+        # Verify the capture worked. An empty PASSPHRASE_FILE means the
+        # boot script's output format has changed and the awk pattern
+        # missed it, which would silently produce a summary box with no
+        # passphrase inside; the operator would lose the passphrase
+        # without realising. Fail loudly instead.
+        if [ ! -s "$PASSPHRASE_FILE" ]; then
+            fail "Passphrase capture failed — could not extract from boot script output"
+            echo ""
+            echo -e "${C_DIM}--- output ---${C_RESET}"
+            cat "$OUT"
+            echo -e "${C_DIM}--------------${C_RESET}"
+            rm -f "$OUT"
+            echo ""
+            echo "  The boot USB was written, but the scanner passphrase could"
+            echo "  not be extracted from prepare-boot-usb.sh's output. Without"
+            echo "  the passphrase the boot USB is unusable. Boot script output"
+            echo "  format may have changed since this orchestrator was written."
+            exit 1
+        fi
+        rm -f "$OUT"
     fi
 fi
 
 # ── Phase 5: Verification ─────────────────────────────────────────────────────
 header "Verification"
 
-# Verify data USB checksums by re-mounting and checking.
 if [ "$USB_MODE" = "all" ] || [ "$USB_MODE" = "data" ]; then
-    progress "Verifying TROSKEL-DATA checksums..."
-    VMOUNT="$(mktemp -d)"
-    DATA_PART="${DATA_DEV}1"
-    [ -b "${DATA_DEV}p1" ] && DATA_PART="${DATA_DEV}p1"
-    mount -o ro "$DATA_PART" "$VMOUNT" 2>/dev/null \
-        && cd "$VMOUNT" \
-        && sha256sum --check scanner-rootfs.ext4.sha256 >/dev/null 2>&1 \
-        && ok "TROSKEL-DATA checksums verified" \
-        || { fail "TROSKEL-DATA checksum verification failed — do not use this USB."; exit 1; }
-    cd /; umount "$VMOUNT"; rm -rf "$VMOUNT"
+    run_step "Verifying TROSKEL-DATA checksums" verify_data_usb_checksums
 fi
 
 # ── Phase 6: Summary ──────────────────────────────────────────────────────────
@@ -360,9 +470,8 @@ if [ -s "$PASSPHRASE_FILE" ]; then
     echo -e "${C_BOLD}${C_YELLOW}║  SCANNER PASSPHRASE — RECORD THIS NOW            ║${C_RESET}"
     echo -e "${C_BOLD}${C_YELLOW}╚══════════════════════════════════════════════════╝${C_RESET}"
     echo ""
-    grep -v "===\|PASSPHRASE\|This passphrase\|not stored\|Write it" "$PASSPHRASE_FILE" \
-        | grep -v "^$" \
-        | sed 's/^/  /'
+    grep -v "^$" "$PASSPHRASE_FILE" \
+        | sed 's/^[[:space:]]*/    /'
     echo ""
     echo -e "  ${C_DIM}This passphrase is not stored anywhere. Record it on the"
     echo -e "  boot USB label or in your password manager before continuing.${C_RESET}"

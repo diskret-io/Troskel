@@ -2,15 +2,15 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
   "version": 1,
-  "serialNumber": "urn:uuid:97e53fc6-4bd5-4abd-b56b-bfe55b113ffa",
+  "serialNumber": "urn:uuid:da8729fb-a9ab-4633-a69c-c3f181b53451",
   "metadata": {
-    "timestamp": "2026-05-21T12:26:20+00:00",
+    "timestamp": "2026-06-17T17:53:08+00:00",
     "tools": {
       "components": [
         {
           "type": "application",
           "name": "troskel-build-records-generator",
-          "version": "0.9.0",
+          "version": "0.9.1",
           "vendor": "troskel-project",
           "description": "Generates SBOM.json and build-manifest.json from versions.env and build-station state. See scripts/generate-build-records.sh."
         }
@@ -19,16 +19,16 @@
     "component": {
       "type": "application",
       "name": "troskel",
-      "version": "0.9.0",
+      "version": "0.9.1",
       "description": "Air-gapped file-crossing scanner",
       "supplier": {"name": "Diskret Team"},
       "licenses": [{"license": {"id": "MIT"}}],
-      "purl": "pkg:generic/troskel@0.9.0",
+      "purl": "pkg:generic/troskel@0.9.1",
       "properties": [
         {"name": "project-type", "value": "security-tool"},
         {"name": "deployment-model", "value": "air-gapped"},
-        {"name": "troskel-commit", "value": "unknown"},
-        {"name": "troskel-dirty", "value": "false"}
+        {"name": "troskel-commit", "value": "81dc4bf3b09c38217b5fae01c64ecd07ea43bdd0"},
+        {"name": "troskel-dirty", "value": "true"}
       ]
     },
     "manufacture": {"name": "Diskret"},
@@ -112,7 +112,7 @@
       "properties": [
         {"name": "update-frequency", "value": "daily"},
         {"name": "freshness-gate", "value": "30-days"},
-        {"name": "downloaded-at", "value": "2026-05-21T12:25:20+00:00"},
+        {"name": "downloaded-at", "value": "2026-06-17T15:39:35+00:00"},
         {"name": "verification-method", "value": "freshclam-embedded-keys"},
         {"name": "pin-category", "value": "FLOATING"}
       ]
@@ -154,16 +154,16 @@
     {
       "type": "file",
       "name": "yara-forge-core-rules",
-      "version": "20260517",
+      "version": "20260614",
       "description": "YARA Forge Core rule set for LOKI-RS. Floats with weekly upstream releases; the resolved tag and archive SHA-256 are captured here per build for reproducibility.",
       "supplier": {"name": "YARA Forge"},
-      "purl": "pkg:generic/yara-forge-core@20260517",
+      "purl": "pkg:generic/yara-forge-core@20260614",
       "externalReferences": [{"url": "https://github.com/YARAHQ/yara-forge", "type": "website"}],
-      "hashes": [{"alg": "SHA-256", "content": "b0c76e9476ad240fb513553a67760a0971b37aa0a75aee92a0b4692ff7108138"}],
+      "hashes": [{"alg": "SHA-256", "content": "defddf8fb75c9670bc76fa5b9d490cc9ffca2f8c688161bc84701a19a806a69a"}],
       "properties": [
         {"name": "update-method", "value": "scripts/download-loki-yara-rules.sh"},
         {"name": "curated", "value": "true"},
-        {"name": "downloaded-at", "value": "2026-05-21T12:25:22+00:00"},
+        {"name": "downloaded-at", "value": "2026-06-17T15:39:37+00:00"},
         {"name": "verification-method", "value": "tls-only"},
         {"name": "pin-category", "value": "FLOATING"}
       ]
@@ -247,7 +247,7 @@
   ],
   "dependencies": [
     {
-      "ref": "pkg:generic/troskel@0.9.0",
+      "ref": "pkg:generic/troskel@0.9.1",
       "dependsOn": [
         "pkg:generic/fedora-coreos@stable",
         "pkg:github/firecracker-microvm/firecracker@v1.7.0",
@@ -267,7 +267,7 @@
     {
       "ref": "pkg:github/Neo23x0/Loki-RS@v2.10.0",
       "dependsOn": [
-        "pkg:generic/yara-forge-core@20260517",
+        "pkg:generic/yara-forge-core@20260614",
         "pkg:github/Neo23x0/signature-base@v2.0"
       ]
     },
@@ -283,7 +283,7 @@
   "compositions": [
     {
       "aggregate": "complete",
-      "assemblies": ["pkg:generic/troskel@0.9.0"],
+      "assemblies": ["pkg:generic/troskel@0.9.1"],
       "note": "Generated from versions.env and build-station state by scripts/generate-build-records.sh."
     }
   ],

@@ -57,16 +57,16 @@ Leave manual. The case is valuable to perform before each release on representat
 
 ## Summary
 
-| Case | Triage | New home |
-|------|--------|----------|
-| Freshness gate (stale signatures) | Automate | `test-validate.sh` (Tier 1) |
-| Cleanup trap on SIGINT | Automate | `test-scan.sh` (Tier 3) |
-| Read-only enforcement | Automate | `test-scan.sh` (Tier 3) |
-| Yellow path — empty log | Automate, gated | `test-yellow-paths.sh` |
-| Yellow path — unrecognised verdict | Automate, gated | `test-yellow-paths.sh` |
-| ClamAV error path | Leave manual | (no change) |
-| LOKI-RS error path | Leave manual | (no change) |
-| Resource exhaustion (zip bomb) | Leave manual | (no change) |
+| Case                               | Triage          | New home                    |
+|------------------------------------|-----------------|-----------------------------|
+| Freshness gate (stale signatures)  | Automate        | `test-validate.sh` (Tier 1) |
+| Cleanup trap on SIGINT             | Automate        | `test-scan.sh` (Tier 3)     |
+| Read-only enforcement              | Automate        | `test-scan.sh` (Tier 3)     |
+| Yellow path — empty log            | Automate, gated | `test-yellow-paths.sh`      |
+| Yellow path — unrecognised verdict | Automate, gated | `test-yellow-paths.sh`      |
+| ClamAV error path                  | Leave manual    | (no change)                 |
+| LOKI-RS error path                 | Leave manual    | (no change)                 |
+| Resource exhaustion (zip bomb)     | Leave manual    | (no change)                 |
 
 After the changes land, `tests/manual-tests-scan.md` is shorter: three test cases remain (the two engine error paths and the zip bomb), with a paragraph at the top explaining what was automated and where it now lives.
 

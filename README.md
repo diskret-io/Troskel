@@ -12,7 +12,7 @@ Troskel uses multiple engines, currently [ClamAV](https://www.clamav.net/) and [
  
 ## Project status
 
-**Version: 0.9.0. Pre-1.0.0, demonstrator / evaluation-grade.**
+**Version: 0.9.1. Pre-1.0.0, demonstrator / evaluation-grade.**
 
 Suitable for:
 
@@ -26,9 +26,7 @@ Not suitable for:
 - Critical-infrastructure use (IEC 62443, NIS2).
 - Any setting requiring a signed, attestable scan certificate.
 
-See [`SECURITY.md`](SECURITY.md) for the threat model and known limits of
-signature-based scanning. 1.0.0 is a documentation and pipeline milestone,
-not a security-posture commitment.
+See [`SECURITY.md`](SECURITY.md) for the threat model and known limits of signature-based scanning.
 
 ## Requirements
 
@@ -115,6 +113,7 @@ scripts/                 Build station scripts (see docs/ADMIN.md, docs/DEVELOPE
   build-scanner-image.sh Build Debian guest rootfs with ClamAV + LOKI-RS
   generate-build-records.sh  Produce SBOM.json and per-build manifest
   download-*.sh          Individual download scripts
+  lib/                   Sourceable helpers shared across scripts
 
 tests/                   Test pipeline (see docs/DEVELOPER.md)
 
@@ -123,6 +122,7 @@ docs/
   DEVELOPER.md           Developer guide
   architecture.md        Design rationale with diagrams
   OPERATOR-GUIDE.md      Operator troubleshooting reference
+  canary.md              Upstream canary, dependency drift monitoring
   roadmap/               Planned work
 ```
 

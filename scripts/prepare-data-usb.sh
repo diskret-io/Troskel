@@ -42,8 +42,75 @@ done
 
 echo "[*] Preparing data USB on ${USB_DEV} (transport: usb, size: $(lsblk -no SIZE "$USB_DEV" | head -1))."
 echo "    WARNING: all data on ${USB_DEV} will be destroyed."
-read -r -p "    Continue? [y/N] " CONFIRM
-[[ "$CONFIRM" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
+
+# Confirmation prompt. Skipped when invoked by the orchestrator
+# (troskel-build.sh sets TROSKEL_CONFIRMED=1 after the operator has
+# confirmed the device assignment in Phase 1). When invoked directly
+# the operator gets the safety prompt as usual.
+if [ "${TROSKEL_CONFIRMED:-0}" = "1" ]; then
+    echo "    (Confirmation from orchestrator: TROSKEL_CONFIRMED=1)"
+else
+    read -r -p "    Continue? [y/N] " CONFIRM
+    [[ "$CONFIRM" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
+fi
+
+# Release any handles on the device before destructive operations and
+# verify the release actually happened. This block has a contract with
+# the orchestrator: if the device cannot be released, we abort non-zero
+# with a diagnostic naming what is holding it. We do NOT swallow the
+# failure with `|| true`, because operating on a busy device causes
+# silent corruption (writes absorbed by stale page cache for an
+# existing mount; verify against source rather than the USB).
+#
+# A desktop-environment auto-mounter (gnome-volume-monitor, udisks2)
+# may have mounted partitions on the USB the moment it was inserted;
+# udev may still be probing after a recent insertion. Either condition
+# blocks wipefs and the rest of the destructive sequence.
+echo "[*] Releasing device handles..."
+
+# Attempt to unmount any partition on this device. The glob expands to
+# /dev/sdX1, /dev/sdX2, etc.; the trailing ?* requires at least one
+# character so the parent device is not matched. Individual umount
+# failures here are not yet fatal; the verification below is.
+for PART in "${USB_DEV}"?*; do
+    [ -b "$PART" ] || continue
+    # Find every mountpoint that resolves to this partition (a device
+    # can be mounted in multiple places via bind mounts or auto-mount
+    # plus orchestrator temp mounts) and unmount each.
+    while MNT="$(findmnt -no TARGET --source "$PART" 2>/dev/null | head -1)"; do
+        [ -n "$MNT" ] || break
+        umount "$MNT" 2>/dev/null || umount -l "$MNT" 2>/dev/null || break
+    done
+done
+udevadm settle
+
+# Verify: if anything on this device is still mounted, abort with a
+# diagnostic naming the offending mount and (where possible) the
+# process holding it. The operator needs to act; we will not proceed.
+STILL_MOUNTED="$(findmnt -no TARGET,SOURCE \
+    | awk -v dev="$(basename "$USB_DEV")" '$2 ~ dev {print}')"
+if [ -n "$STILL_MOUNTED" ]; then
+    echo "[!] Cannot release ${USB_DEV} — partitions still mounted:" >&2
+    echo "$STILL_MOUNTED" | sed 's/^/      /' >&2
+    echo "" >&2
+    # Try to name the holders. fuser may not be installed everywhere;
+    # fall back to lsof if available; otherwise just say so.
+    if command -v fuser >/dev/null 2>&1; then
+        echo "    Processes holding mounts on ${USB_DEV}:" >&2
+        for PART in "${USB_DEV}"?*; do
+            [ -b "$PART" ] || continue
+            fuser -vm "$PART" 2>&1 | sed 's/^/      /' >&2 || true
+        done
+    elif command -v lsof >/dev/null 2>&1; then
+        echo "    Processes with open files on ${USB_DEV}:" >&2
+        lsof "$USB_DEV"?* 2>/dev/null | sed 's/^/      /' >&2 || true
+    fi
+    echo "" >&2
+    echo "    Close any file managers showing the USB, exit any" >&2
+    echo "    terminals cd'd into its mount, or unplug and replug" >&2
+    echo "    the device. Then re-run this command." >&2
+    exit 1
+fi
 
 echo "[*] Formatting ${USB_DEV} with label TROSKEL-DATA..."
 wipefs -a "$USB_DEV"

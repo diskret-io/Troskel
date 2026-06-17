@@ -120,6 +120,14 @@ truncate -s "$SIZE" "$OUTPUT"
 mkfs.ext4 -F -d "$WORK" "$OUTPUT"
 e2fsck -fn "$OUTPUT" && echo "[+] Image verified OK."
 
-sha256sum "$OUTPUT" > "${OUTPUT}.sha256"
+# Emit the sidecar with a relative path (basename only) so downstream
+# verifications (prepare-data-usb.sh, troskel-build.sh phase 5) resolve
+# the hash against the file in the verifier's current working directory.
+# Using an absolute path here bakes /var/lib/troskel/ into the sidecar
+# and causes downstream `cd "$MOUNT" && sha256sum --check` to follow the
+# absolute path back to the source on the host, verifying the source
+# rather than the copy on the USB. That collapses the verification
+# step to a no-op against a USB that may not have been written.
+( cd "$(dirname "$OUTPUT")" && sha256sum "$(basename "$OUTPUT")" > "$(basename "$OUTPUT").sha256" )
 echo "[+] Image written to: $OUTPUT"
 echo "[+] SHA-256: $(cat "${OUTPUT}.sha256")"
