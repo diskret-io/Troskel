@@ -1,15 +1,15 @@
 ---
 id: "defer-1.0.0-tag-0.9.1-2026-06-16"
-status: "in-progress"
+status: "done"
 priority: "high"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-16T18:25:11.762Z"
-modified: "2026-06-17T16:01:48.753Z"
-completedAt: null
+modified: "2026-06-17T17:41:11.775Z"
+completedAt: "2026-06-17T17:41:11.775Z"
 labels: ["docs", "infra"]
-order: "a0"
+order: "Zu"
 ---
 # Defer 1.0.0 tag; ship 0.9.1 with bugfixes
 
