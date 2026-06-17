@@ -1,12 +1,12 @@
 ---
 id: "rewrite-verification-protocol-2026-06-16"
-status: "backlog"
+status: "todo"
 priority: "medium"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-16T18:25:11.791Z"
-modified: "2026-06-16T18:25:11.791Z"
+modified: "2026-06-17T16:01:54.374Z"
 completedAt: null
 labels: ["refactor", "quality", "security"]
 order: "a1"

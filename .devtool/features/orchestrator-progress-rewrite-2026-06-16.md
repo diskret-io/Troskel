@@ -1,12 +1,12 @@
 ---
 id: "orchestrator-progress-rewrite-2026-06-16"
-status: "backlog"
+status: "todo"
 priority: "medium"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-16T18:25:11.785Z"
-modified: "2026-06-16T18:25:11.785Z"
+modified: "2026-06-17T16:01:56.368Z"
 completedAt: null
 labels: ["refactor", "infra"]
 order: "a2"

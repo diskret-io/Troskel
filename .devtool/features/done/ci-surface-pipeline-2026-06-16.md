@@ -1,15 +1,15 @@
 ---
 id: "ci-surface-pipeline-2026-06-16"
-status: "todo"
+status: "done"
 priority: "high"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-16T18:25:11.759Z"
-modified: "2026-06-16T18:25:11.759Z"
-completedAt: null
+modified: "2026-06-17T16:01:46.616Z"
+completedAt: "2026-06-17T16:01:46.616Z"
 labels: ["infra", "quality"]
-order: "a0"
+order: "Zv"
 ---
 # Surface CI pipeline state explicitly
 
