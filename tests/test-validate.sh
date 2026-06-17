@@ -8,6 +8,7 @@
 #   1. Butane config compiles without error (with dummy password hash)
 #   2. shellcheck passes on all shell scripts in the project
 #   3. guest/run-scan.sh uses only POSIX sh constructs (no bashisms)
+#   4. run_step unit tests (scripts/lib/run-step.sh failure-mode discipline)
 #
 # This tier runs on any Linux host with butane and shellcheck installed,
 # including inside the troskel-build container without --privileged.
@@ -108,6 +109,22 @@ else
         result "possible bashisms found: $BASHISMS" \
             "guest/run-scan.sh is POSIX sh compatible (heuristic)"
     fi
+fi
+
+# --- 4. run_step unit tests ---------------------------------------------------
+# Exercises the orchestrator's stage-runner contract (scripts/lib/run-step.sh).
+# Five assertions covering happy path, failure propagation, silent-success
+# catching via POSTCOND, both-signals-pass agreement, and POSTCOND one-shot
+# behaviour. See tests/test-run-step.sh header for bug history.
+#
+# Lives in Tier 1 because the test is hermetic: no root, no container,
+# no real files beyond mktemp scratch space. Sub-second runtime.
+echo "[*] Running run_step unit tests..."
+if bash "${SCRIPT_DIR}/test-run-step.sh" > /tmp/rs-out.txt 2>&1; then
+    result "ok" "run_step unit tests"
+else
+    result "run_step unit tests failed — see output below" "run_step unit tests"
+    cat /tmp/rs-out.txt | sed 's/^/         /'
 fi
 
 # --- Summary -----------------------------------------------------------------

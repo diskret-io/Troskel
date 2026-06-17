@@ -23,19 +23,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/../config/versions.env"
 
-# ── Colour helpers ────────────────────────────────────────────────────────────
-# Only emit colour codes if stdout is a terminal.
-if [ -t 1 ]; then
-    C_RESET='\033[0m'
-    C_BOLD='\033[1m'
-    C_GREEN='\033[0;32m'
-    C_YELLOW='\033[0;33m'
-    C_RED='\033[0;31m'
-    C_CYAN='\033[0;36m'
-    C_DIM='\033[2m'
-else
-    C_RESET='' C_BOLD='' C_GREEN='' C_YELLOW='' C_RED='' C_CYAN='' C_DIM=''
-fi
+# Shared stage runner and UI helpers. Lives in scripts/lib/run-step.sh
+# so that tests/test-run-step.sh can exercise the same function this
+# orchestrator uses, with no risk of the two implementations drifting.
+# See scripts/lib/run-step.sh header for the function contract.
+source "${SCRIPT_DIR}/lib/run-step.sh"
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 USB_MODE="all"        # all | data | boot
@@ -59,92 +51,6 @@ for arg in "$@"; do
             ;;
     esac
 done
-
-# ── Output helpers ────────────────────────────────────────────────────────────
-header() {
-    echo ""
-    echo -e "${C_BOLD}${C_CYAN}══ $* ══${C_RESET}"
-}
-
-progress() { echo -e "  ${C_DIM}▸${C_RESET} $*"; }
-ok()       { echo -e "  ${C_GREEN}✓${C_RESET} $*"; }
-warn()     { echo -e "  ${C_YELLOW}⚠${C_RESET}  $*"; }
-fail()     { echo -e "  ${C_RED}✗${C_RESET} $*"; }
-
-# Run a sub-script as a named stage. In normal mode suppress its output
-# and show a single progress/ok line; in debug mode stream everything.
-# Failure modes handled:
-#
-#   1. The sub-script exits non-zero. We fail loudly, dump the captured
-#      output, and exit non-zero ourselves. set -e in the orchestrator
-#      would do this for us, but doing it explicitly lets us label the
-#      failure with the stage name and dump the captured output, which
-#      is the information the operator needs.
-#
-#   2. The sub-script exits zero but the work was not actually done.
-#      This is the silent-success failure mode the project hit when
-#      inner-script `|| true` patterns swallowed real errors. We guard
-#      against it with an optional post-condition: the caller passes
-#      a function name as POSTCOND, run_step invokes it after the
-#      sub-script returns zero, and a non-zero return from the
-#      post-condition fails the stage. The post-condition exists so
-#      "exit code 0" is no longer the only signal we trust.
-#
-# Usage:
-#   run_step "Label" command args...
-#   POSTCOND=fn_name run_step "Label" command args...
-run_step() {
-    local LABEL="$1"; shift
-    local POSTCOND_FN="${POSTCOND:-}"
-    unset POSTCOND   # one-shot; do not leak into the next call
-    progress "${LABEL}..."
-    if [ "$DEBUG" -eq 1 ]; then
-        if ! "$@"; then
-            fail "$LABEL"
-            echo -e "${C_RED}Build failed at: ${LABEL}${C_RESET}"
-            exit 1
-        fi
-        if [ -n "$POSTCOND_FN" ] && ! "$POSTCOND_FN"; then
-            fail "${LABEL} — post-condition failed"
-            echo -e "${C_RED}Build failed at: ${LABEL} (post-condition)${C_RESET}"
-            echo "  The sub-script exited zero but the expected result is missing."
-            echo "  This indicates a silent failure inside the sub-script."
-            exit 1
-        fi
-        ok "$LABEL"
-    else
-        local OUT
-        OUT="$(mktemp)"
-        if ! "$@" > "$OUT" 2>&1; then
-            fail "$LABEL"
-            echo ""
-            echo -e "${C_DIM}--- output ---${C_RESET}"
-            cat "$OUT"
-            echo -e "${C_DIM}--------------${C_RESET}"
-            rm -f "$OUT"
-            echo ""
-            echo -e "${C_RED}Build failed at: ${LABEL}${C_RESET}"
-            echo "  Run with --debug for full output."
-            exit 1
-        fi
-        if [ -n "$POSTCOND_FN" ] && ! "$POSTCOND_FN"; then
-            fail "${LABEL} — post-condition failed"
-            echo ""
-            echo -e "${C_DIM}--- output ---${C_RESET}"
-            cat "$OUT"
-            echo -e "${C_DIM}--------------${C_RESET}"
-            rm -f "$OUT"
-            echo ""
-            echo -e "${C_RED}Build failed at: ${LABEL} (post-condition)${C_RESET}"
-            echo "  The sub-script exited zero but the expected result is missing."
-            echo "  This indicates a silent failure inside the sub-script."
-            echo "  Run with --debug for full output."
-            exit 1
-        fi
-        ok "$LABEL"
-        rm -f "$OUT"
-    fi
-}
 
 # ── Post-condition helpers ────────────────────────────────────────────────────
 # Each writes its diagnostic to stderr on failure and returns non-zero.
