@@ -1,15 +1,15 @@
 ---
 id: "extend-system-prompt-quality-bar-2026-06-16"
-status: "in-progress"
+status: "done"
 priority: "high"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-16T18:25:11.766Z"
-modified: "2026-06-16T19:56:40.578Z"
-completedAt: null
+modified: "2026-06-17T12:41:36.131Z"
+completedAt: "2026-06-17T12:41:36.131Z"
 labels: ["quality", "docs"]
-order: "a0"
+order: "Zy"
 ---
 # Extend system prompt with quality-bar rules
 

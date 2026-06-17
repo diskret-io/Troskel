@@ -1,15 +1,15 @@
 ---
 id: "write-quality-md-2026-06-16"
-status: "todo"
+status: "done"
 priority: "high"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-16T18:25:11.794Z"
-modified: "2026-06-16T18:25:11.794Z"
-completedAt: null
+modified: "2026-06-17T12:37:29.384Z"
+completedAt: "2026-06-17T12:37:29.384Z"
 labels: ["quality", "docs"]
-order: "a5"
+order: "Zz"
 ---
 # Write docs/QUALITY.md
 

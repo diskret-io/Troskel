@@ -1,15 +1,15 @@
 ---
 id: "negative-case-test-sidecar-2026-06-16"
-status: "todo"
+status: "done"
 priority: "high"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-16T18:25:11.782Z"
-modified: "2026-06-16T18:25:11.782Z"
-completedAt: null
+modified: "2026-06-17T13:19:23.439Z"
+completedAt: "2026-06-17T13:19:23.439Z"
 labels: ["tests", "quality", "security"]
-order: "a4"
+order: "Zx"
 ---
 # Negative-case test: sidecar verify catches USB corruption
 

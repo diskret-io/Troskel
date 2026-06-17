@@ -20,6 +20,7 @@
 #   - Guest kernel download
 #   - Scanner image build (debootstrap, ClamAV install, LOKI-RS install,
 #     signature/rule injection, ext4 image)
+#   - Sidecar verification regression test (hermetic)
 #
 # Container-internal requirements (the Dockerfile and Makefile satisfy these):
 #   - root (the underlying scripts need it for debootstrap, mkfs.ext4,
@@ -229,6 +230,19 @@ bash scripts/download-kernel.sh
 
 step "6/6  Build scanner image"
 bash scripts/build-scanner-image.sh
+
+# ── Post-build regression tests ───────────────────────────────────────────────
+# Tests that exercise the artefacts the build just produced, beyond the
+# build's own happy-path checks. These are run inside the same container
+# session so the artefacts are guaranteed fresh and available.
+
+step "Sidecar verification regression"
+# Hermetic test: simulates the sidecar produce/verify protocol and
+# asserts verification fails against a corrupted file. Catches the
+# class of bug where the sidecar contains an absolute path that
+# routes verification back to the source rather than the copy.
+# See tests/test-usb-verify.sh header for the bug history.
+bash "${SCRIPT_DIR}/test-usb-verify.sh"
 
 echo ""
 echo "=== Build pipeline OK ==="
