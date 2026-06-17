@@ -9,7 +9,7 @@ created: "2026-06-16T18:25:11.779Z"
 modified: "2026-06-17T15:44:00.542Z"
 completedAt: "2026-06-17T15:44:00.542Z"
 labels: ["tests", "quality", "security"]
-order: "Zw"
+order: "a4"
 ---
 # Negative-case test: orchestrator propagates inner-script failures
 

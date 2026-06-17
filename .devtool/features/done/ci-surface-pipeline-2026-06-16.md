@@ -9,7 +9,7 @@ created: "2026-06-16T18:25:11.759Z"
 modified: "2026-06-17T16:01:46.616Z"
 completedAt: "2026-06-17T16:01:46.616Z"
 labels: ["infra", "quality"]
-order: "Zv"
+order: "a0"
 ---
 # Surface CI pipeline state explicitly
 

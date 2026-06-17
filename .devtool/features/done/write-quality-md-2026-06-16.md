@@ -9,7 +9,7 @@ created: "2026-06-16T18:25:11.794Z"
 modified: "2026-06-17T12:37:29.384Z"
 completedAt: "2026-06-17T12:37:29.384Z"
 labels: ["quality", "docs"]
-order: "Zz"
+order: "a7"
 ---
 # Write docs/QUALITY.md
 

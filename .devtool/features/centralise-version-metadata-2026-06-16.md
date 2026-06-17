@@ -9,7 +9,7 @@ created: "2026-06-16T18:25:11.756Z"
 modified: "2026-06-16T18:25:11.756Z"
 completedAt: null
 labels: ["refactor", "docs"]
-order: "a3"
+order: "a2"
 ---
 # Centralise version metadata
 
