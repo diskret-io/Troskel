@@ -172,22 +172,43 @@ sed -i "s|^LOKI_SHA256=.*|LOKI_SHA256=\"${ORIG_LOKI_SHA}\"|" "$VERSIONS_FILE"
 ORIG_LOKI_SHA=""    # avoid double-restore in the trap
 
 # Test B — guest kernel verification (download-kernel.sh verify mode)
-# Only applicable if KERNEL_SHA256 is already populated (verify mode). If
-# the recorded value is empty (first-run discovery has not happened yet),
-# skip this test — there's nothing to corrupt.
+# Applicable only in verify mode: both KERNEL_RESOLVED and KERNEL_SHA256
+# populated in versions.env. If either is empty (fresh discover state),
+# there is no recorded pin to verify against, so skip.
+#
+# Strategy: rather than corrupt the recorded SHA and rely on a correct
+# kernel being on disk (which assumes a prior build this session, an
+# ordering dependency), we corrupt the ON-DISK kernel and leave the
+# recorded SHA intact. download-kernel.sh verify mode hashes the on-disk
+# vmlinux against the recorded SHA before any download; synthetic wrong
+# bytes mismatch the (correct, untouched) recorded value, so the mismatch
+# path fires with no network and no dependence on build order. Any real
+# vmlinux present is backed up and restored; a synthetic one is removed.
 echo ""
 echo "  [b] guest kernel SHA-256 mismatch"
-ORIG_KERNEL_SHA="$(grep -oP '(?<=^KERNEL_SHA256=")[^"]*' "$VERSIONS_FILE")"
-if [ -z "$ORIG_KERNEL_SHA" ]; then
-    echo "[i] KERNEL_SHA256 is empty (discover mode); skipping verify-mode test."
-    ORIG_KERNEL_SHA=""
+KERNEL_RESOLVED_NOW="$(grep -oP '(?<=^KERNEL_RESOLVED=")[^"]*' "$VERSIONS_FILE")"
+KERNEL_SHA_NOW="$(grep -oP '(?<=^KERNEL_SHA256=")[^"]*' "$VERSIONS_FILE")"
+if [ -z "$KERNEL_RESOLVED_NOW" ] || [ -z "$KERNEL_SHA_NOW" ]; then
+    echo "[i] kernel not pinned (discover state); skipping verify-mode test."
 else
-    sed -i "s|^KERNEL_SHA256=.*|KERNEL_SHA256=\"0000000000000000000000000000000000000000000000000000000000000000\"|" "$VERSIONS_FILE"
-    rm -f "${SIGDIR}/vmlinux"
+    KERNEL_FILE="${SIGDIR}/vmlinux"
+    KERNEL_BACKUP=""
+    if [ -f "$KERNEL_FILE" ]; then
+        KERNEL_BACKUP="$(mktemp)"
+        cp -a "$KERNEL_FILE" "$KERNEL_BACKUP"
+    fi
+    # Synthetic wrong-bytes kernel. Its hash will not match the recorded
+    # (untouched) KERNEL_SHA256, so verify mode reports the mismatch.
+    printf 'synthetic-corrupt-kernel-for-negative-test' > "$KERNEL_FILE"
     assert_fails_with "kernel mismatch" "SHA-256 mismatch for guest kernel" \
         bash scripts/download-kernel.sh
-    sed -i "s|^KERNEL_SHA256=.*|KERNEL_SHA256=\"${ORIG_KERNEL_SHA}\"|" "$VERSIONS_FILE"
-    ORIG_KERNEL_SHA=""
+    # Restore the real kernel if there was one; otherwise remove the
+    # synthetic so we do not leave a bogus vmlinux for later steps.
+    if [ -n "$KERNEL_BACKUP" ]; then
+        mv "$KERNEL_BACKUP" "$KERNEL_FILE"
+    else
+        rm -f "$KERNEL_FILE"
+    fi
 fi
 
 # Re-install LOKI-RS now that the negative test is complete, so subsequent
