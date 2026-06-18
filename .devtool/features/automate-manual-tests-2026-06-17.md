@@ -1,15 +1,15 @@
 ---
 id: "automate-manual-tests-2026-06-17"
-status: "backlog"
+status: "todo"
 priority: "medium"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-17T18:50:48.761Z"
-modified: "2026-06-17T18:50:48.761Z"
+modified: "2026-06-18T18:15:43.147Z"
 completedAt: null
 labels: ["tests", "infra"]
-order: "a0"
+order: "a2V"
 ---
 # Automate manual tests
 
