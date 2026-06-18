@@ -1,15 +1,15 @@
 ---
 id: "output-usb-2026-06-17"
-status: "backlog"
+status: "todo"
 priority: "medium"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-17T18:50:48.769Z"
-modified: "2026-06-17T18:50:48.769Z"
+modified: "2026-06-18T15:47:12.347Z"
 completedAt: null
 labels: ["feature", "security"]
-order: "a5"
+order: "a3"
 ---
 # Output USB with signed scan certificates
 

@@ -1,15 +1,15 @@
 ---
 id: "centralise-version-metadata-2026-06-16"
-status: "backlog"
+status: "done"
 priority: "low"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-16T18:25:11.756Z"
-modified: "2026-06-17T20:00:00.000Z"
-completedAt: null
+modified: "2026-06-18T15:41:24.542Z"
+completedAt: "2026-06-18T15:41:24.543Z"
 labels: ["refactor", "docs"]
-order: "a2"
+order: "Zz"
 ---
 # Centralise version metadata
 
