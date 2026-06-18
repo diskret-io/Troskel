@@ -20,7 +20,7 @@ respective licences.
 
 The wordlist is used by `scripts/prepare-boot-usb.sh` to generate random
 four-word diceware passphrases for the scanning-host login. It is not
-committed to the repository — it is downloaded and verified at setup time
+committed to the repository, it is downloaded and verified at setup time
 by `scripts/prepare-build-machine.sh`, which calls `download-wordlist.sh`.
 
 **Attribution requirement**: The CC-BY 3.0 licence requires attribution when

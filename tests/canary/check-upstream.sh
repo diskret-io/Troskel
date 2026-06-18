@@ -180,18 +180,18 @@ check_clamav_freshness_oracle
 
 # ── Static / well-known endpoints ─────────────────────────────────────────────
 
-# EFF wordlist — used by prepare-boot-usb.sh for diceware passphrase generation.
+# EFF wordlist: used by prepare-boot-usb.sh for diceware passphrase generation.
 check "https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt" \
       "EFF Long Wordlist"
 
-# Debian mirror — used by debootstrap during scanner-image build.
+# Debian mirror: used by debootstrap during scanner-image build.
 check "https://deb.debian.org/debian/dists/${DEBIAN_RELEASE}/Release" \
       "Debian ${DEBIAN_RELEASE} mirror"
 
-# CoreOS installer container image registry — pulled by prepare-boot-usb.sh.
+# CoreOS installer container image registry, pulled by prepare-boot-usb.sh.
 # The OCI Distribution Spec mandates that /v2/ on a working registry returns
 # 401 Unauthorized when accessed without credentials. 401 here means
-# "registry is up, auth here for data" — it is the healthy response.
+# "registry is up, auth here for data". It is the healthy response.
 # A 5xx or connection failure would mean the registry is genuinely down.
 check "https://quay.io/v2/" \
       "Quay.io registry (coreos-installer)" \

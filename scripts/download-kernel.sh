@@ -49,7 +49,7 @@ CI_VERSION="${FC_VERSION%.*}"   # v1.7.0 -> v1.7
 #
 # Ownership is captured by numeric UID/GID rather than names, because in
 # containers (CI, build images) the file's owner often has no matching
-# /etc/passwd entry — stat -c '%U:%G' returns "UNKNOWN:UNKNOWN" in that
+# /etc/passwd entry. Stat -c '%U:%G' returns "UNKNOWN:UNKNOWN" in that
 # case, which chown rejects. Numeric IDs always resolve.
 #
 # Only updates if the current on-disk value is the empty string. This is

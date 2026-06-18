@@ -1,4 +1,4 @@
-# Build artefacts — never committed; produced by run-update.sh and
+# Build artefacts: never committed; produced by run-update.sh and
 # build-scanner-image.sh at runtime on the build station.
 /var/lib/troskel/
 
@@ -7,10 +7,10 @@
 /tmp/fc-*/
 /tmp/loki-*/
 
-# Scan logs written to the scanning host — not part of the source tree.
+# Scan logs written to the scanning host, not part of the source tree.
 /var/log/troskel/
 
-# Ignition JSON — compiled output of config/scanner-host.bu.
+# Ignition JSON: compiled output of config/scanner-host.bu.
 # Never commit the compiled form; always regenerate from source.
 ignition.json
 
@@ -33,7 +33,7 @@ __pycache__/
 *.egg-info/
 .venv/
 
-# Secrets — belt-and-braces guards. None of these should ever exist
+# Secrets: belt-and-braces guards. None of these should ever exist
 # in the repo, but if they do, git will refuse to track them.
 *.pem
 *.key

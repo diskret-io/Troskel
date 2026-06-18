@@ -11,7 +11,7 @@
 #              The exit code is consulted only to detect hard failures.
 #
 # The host-side wrapper greps the serial log for the exact strings
-# emitted below (THREAT DETECTED / CLEAN / ERROR) — see the verdict
+# emitted below (THREAT DETECTED / CLEAN / ERROR). See the verdict
 # pipeline notes in architecture.md for why guest and host both perform
 # verdict logic. Each engine also emits an ENGINE: summary line that the
 # host displays under the verdict block, so the operator sees which
@@ -31,7 +31,7 @@ log() { echo "[$(date -u +%H:%M:%S)] $*" > "$SERIAL"; }
 LOKI_MAX_FILE_SIZE="${LOKI_MAX_FILE_SIZE:-4294967296}"
 CLAM_MAX_FILE_SIZE="${CLAM_MAX_FILE_SIZE:-4294967296}"
 
-# count_lines — robust replacement for `grep -c PAT FILE || echo 0`. The
+# count_lines: robust replacement for `grep -c PAT FILE || echo 0`. The
 # `grep -c` form prints "0" on no match AND exits non-zero, so paired
 # with `|| echo 0` it produces a two-line value ("0\n0") that fails
 # numeric comparison with [: Illegal number. wc -l on filtered output
@@ -85,7 +85,7 @@ mount -o ro /dev/vdb "$SCANDIR" \
 #                               encrypted ZIP; passing it as clean
 #                               would be a lie. Operator-facing red
 #                               verdicts on legitimate password-protected
-#                               archives are deliberate — the right
+#                               archives are deliberate, the right
 #                               response is to provide an unencrypted
 #                               copy alongside, not to wave the
 #                               unscanned bytes across the air gap.

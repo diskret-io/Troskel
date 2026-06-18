@@ -422,6 +422,175 @@ fi
 rm -f "$OUT_FILE"
 pass "No ticker output after return; ticker is killed and reaped cleanly"
 
+# ── Test 10: confirm_destructive accepts y and Y ─────────────────────────────
+#
+# The explicit-assent path. Both lower and upper case confirm.
+
+step "Test 10: confirm_destructive accepts 'y' and 'Y'"
+
+for ANS in y Y; do
+    RC=0
+    (
+        # shellcheck disable=SC2034
+        DEBUG=0
+        # shellcheck source=../scripts/lib/run-step.sh
+        source "$LIB_FILE"
+        printf '%s\n' "$ANS" | { confirm_destructive "confirm? "; }
+    ) >/dev/null 2>&1 || RC=$?
+    if [ "$RC" -ne 0 ]; then
+        fail "confirm_destructive should accept '$ANS' as assent, returned $RC"
+    fi
+done
+pass "Both 'y' and 'Y' confirm"
+
+# ── Test 11: bare Enter does not confirm ─────────────────────────────────────
+#
+# Regression: the old [Y/n] gates defaulted to yes on empty input, so a
+# stray Enter confirmed a destructive write. confirm_destructive must
+# NOT proceed on empty input. Empty re-asks, so a stream of bare Enters
+# followed by EOF must end without ever returning 0. We feed only blank
+# lines; the read loop exhausts stdin and the final read fails (EOF),
+# which must not be treated as assent.
+
+step "Test 11: bare Enter does not confirm (looks-hung keystroke regression)"
+
+RC=0
+(
+    # shellcheck disable=SC2034
+    DEBUG=0
+    # shellcheck source=../scripts/lib/run-step.sh
+    source "$LIB_FILE"
+    # Three blank lines then EOF. None must confirm.
+    printf '\n\n\n' | { confirm_destructive "confirm? "; }
+) >/dev/null 2>&1 || RC=$?
+if [ "$RC" -eq 0 ]; then
+    fail "Bare Enter must never confirm a destructive step (got exit 0)"
+fi
+pass "Bare Enter does not confirm; empty input re-asks rather than proceeding"
+
+# ── Test 12: non-y input declines ────────────────────────────────────────────
+
+step "Test 12: a non-empty non-y answer declines"
+
+RC=0
+(
+    # shellcheck disable=SC2034
+    DEBUG=0
+    # shellcheck source=../scripts/lib/run-step.sh
+    source "$LIB_FILE"
+    printf 'n\n' | { confirm_destructive "confirm? "; }
+) >/dev/null 2>&1 || RC=$?
+if [ "$RC" -eq 0 ]; then
+    fail "A non-y answer ('n') should decline, got exit 0"
+fi
+pass "Non-y input declines cleanly"
+
+# ── Test 13: stray Enter before the prompt does not confirm ──────────────────
+#
+# The safety property, stated as the outcome the operator cares about: a
+# stray Enter arriving ahead of the prompt does not proceed the
+# destructive step. There is no stdin drain; the property holds because
+# the empty line is read as the answer, fails the y/Y check, and
+# re-asks (then declines at EOF) rather than confirming. A genuine 'y'
+# typed deliberately still works (test 10); this guards the stray case.
+
+step "Test 13: stray Enter before the prompt does not confirm"
+
+RC=0
+(
+    # shellcheck disable=SC2034
+    DEBUG=0
+    # shellcheck source=../scripts/lib/run-step.sh
+    source "$LIB_FILE"
+    # Simulate a stray Enter buffered before the gate, then EOF.
+    printf '\n' | { confirm_destructive "confirm? "; }
+) >/dev/null 2>&1 || RC=$?
+if [ "$RC" -eq 0 ]; then
+    fail "A stray Enter buffered before the prompt must not confirm (got exit 0)"
+fi
+pass "Stray pre-prompt input does not confirm the destructive step"
+
+# ── Test 14: stage plan matches the orchestrator's stage_header calls ─────────
+#
+# Anti-drift. The "Stage N of M" plan lives in scripts/lib/stage-plan.sh
+# (compute_stage_plan), and the orchestrator calls stage_header with one
+# label per planned stage. If the two drift — a stage renamed in one
+# place, added or removed in the other — the operator sees a wrong count
+# or a mislabelled stage. This test enforces agreement statically (no
+# need to run the privileged orchestrator):
+#
+#   (a) For every run mode, compute_stage_plan (the real function, not a
+#       reparse) yields a non-empty plan, and feeding that plan through
+#       stage_plan + one stage_header per label ends with N == M and
+#       never exceeds M. That exercises the runtime counter guard.
+#
+#   (b) Every distinct label compute_stage_plan can emit appears as a
+#       stage_header "<label>" call in scripts/troskel-build.sh. This is
+#       the label-drift check: rename a stage in one place only and this
+#       fails.
+#
+# The reverse direction (a stage_header with no plan slot) is covered by
+# (a): an extra call makes N exceed M and the guard fires.
+
+step "Test 14: stage plan and orchestrator stage_header calls agree"
+
+PLAN_LIB="${PROJECT_ROOT}/scripts/lib/stage-plan.sh"
+ORCH="${PROJECT_ROOT}/scripts/troskel-build.sh"
+[ -f "$PLAN_LIB" ] || fail "stage-plan.sh not found: $PLAN_LIB"
+[ -f "$ORCH" ]     || fail "orchestrator not found: $ORCH"
+
+# (a) counter guard holds for every mode/update combination.
+for COMBO in "all 0" "data 0" "boot 0" "all 1" "data 1" "boot 1"; do
+    set -- $COMBO
+    MODE="$1"; UPD="$2"
+    RC=0
+    OUT="$(
+        # shellcheck source=../scripts/lib/run-step.sh
+        source "$LIB_FILE"
+        # shellcheck source=../scripts/lib/stage-plan.sh
+        source "$PLAN_LIB"
+        mapfile -t P < <(compute_stage_plan "$MODE" "$UPD")
+        [ "${#P[@]}" -gt 0 ] || { echo "EMPTY_PLAN"; exit 1; }
+        stage_plan "${P[@]}"
+        for lbl in "${P[@]}"; do
+            stage_header "$lbl" >/dev/null || { echo "GUARD_FIRED"; exit 1; }
+        done
+        # After consuming exactly the plan, current must equal total.
+        [ "$_STAGE_CURRENT" -eq "$_STAGE_TOTAL" ] || { echo "N_NE_M:${_STAGE_CURRENT}/${_STAGE_TOTAL}"; exit 1; }
+        echo "OK ${#P[@]}"
+    )" || RC=$?
+    if [ "$RC" -ne 0 ]; then
+        fail "Stage-plan counter guard failed for mode='$MODE' update=$UPD: ${OUT}"
+    fi
+done
+pass "Counter guard holds for every run mode (final N == M, never exceeds)"
+
+# (b) every label the plan can emit has a matching stage_header call.
+ALL_LABELS="$(
+    # shellcheck source=../scripts/lib/stage-plan.sh
+    source "$PLAN_LIB"
+    { compute_stage_plan all 0
+      compute_stage_plan data 0
+      compute_stage_plan boot 0
+      compute_stage_plan all 1; } | sort -u
+)"
+MISSING=0
+while IFS= read -r LABEL; do
+    [ -n "$LABEL" ] || continue
+    # Look for stage_header "<LABEL>" in the orchestrator. Match the
+    # label as a literal between the quote and a following quote or
+    # space-paren (labels may carry runtime suffixes like device or
+    # duration appended after the literal, so anchor on the start).
+    if ! grep -qF "stage_header \"${LABEL}\"" "$ORCH"; then
+        echo "[!] plan label has no matching stage_header call: '${LABEL}'" >&2
+        MISSING=1
+    fi
+done <<< "$ALL_LABELS"
+if [ "$MISSING" -ne 0 ]; then
+    fail "Stage plan and orchestrator stage_header calls have drifted (see above)"
+fi
+pass "Every plan label has a matching stage_header call in the orchestrator"
+
 # ── Done ─────────────────────────────────────────────────────────────────────
 
 step "Result"

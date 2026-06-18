@@ -4,7 +4,7 @@
 # Provides all build-station tooling in a container so the host OS is
 # irrelevant. Works with Docker or Podman interchangeably.
 #
-# Usage (via Makefile targets — preferred):
+# Usage (via Makefile targets, preferred):
 #   make image          # build this image
 #   make validate       # Tier 1: Butane + shellcheck, no privileges needed
 #   make test-build     # Tier 2: full image build, needs --privileged
@@ -53,7 +53,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Load version pins. ARG is used so the values are visible in `docker
 # inspect` and CI logs without needing to source a file at runtime.
-# These must match config/versions.env — the Makefile enforces this by
+# These must match config/versions.env, the Makefile enforces this by
 # passing them as --build-arg at image-build time rather than hardcoding.
 ARG FC_VERSION
 ARG BUTANE_VERSION
@@ -109,7 +109,7 @@ RUN mkdir -p /var/lib/troskel/clamav-db /var/lib/troskel/yara-rules /var/lib/tro
 # Container sentinel.
 # /.troskel-container is an empty marker file used by the test scripts to
 # verify they are running inside the troskel-build container rather than
-# directly on a developer's host. See docs/DEVELOPER.md — the rationalised
+# directly on a developer's host. See docs/DEVELOPER.md, the rationalised
 # contract is "test scripts run inside the container, period". The
 # host-direct path was a source of environment-dependent bugs (the
 # freshclam clamav-user issue, the chown-as-root issue) that go away when
@@ -125,7 +125,7 @@ RUN mkdir -p /var/lib/troskel/clamav-db /var/lib/troskel/yara-rules /var/lib/tro
 RUN touch /.troskel-container
 
 # The project is bind-mounted at /troskel at container run time, not
-# COPYed — so changes to the repo are reflected immediately without
+# COPYed, so changes to the repo are reflected immediately without
 # rebuilding the image. WORKDIR sets the default so `docker run --rm
 # troskel-build bash tests/test-validate.sh` just works.
 WORKDIR /troskel

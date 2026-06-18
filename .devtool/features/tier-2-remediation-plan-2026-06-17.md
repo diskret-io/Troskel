@@ -27,12 +27,12 @@ Roadmap doc: `docs/roadmap/security/tier-2-remediation-plan.md`.
 An epic. Multi-week programme of work that pulls together:
 
 - Architectural changes (ingest VM, parallel engines, signed
-  certificates, verdict grammar) — covered by individual 1.1.0
+  certificates, verdict grammar), covered by individual 1.1.0
   and 1.2.0 cards.
 - Supply-chain attestation work (in-toto, reproducible builds,
-  signed releases) — not yet captured as cards.
+  signed releases). not yet captured as cards.
 - Process and documentation work (threat-model refresh, formal
-  audit trail of decisions, incident-response procedures) —
+  audit trail of decisions, incident-response procedures),
   not yet captured as cards.
 
 This card exists to record that the Tier 2 horizon is real and

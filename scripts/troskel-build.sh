@@ -29,6 +29,11 @@ source "${SCRIPT_DIR}/../config/versions.env"
 # See scripts/lib/run-step.sh header for the function contract.
 source "${SCRIPT_DIR}/lib/run-step.sh"
 
+# Stage plan ("Stage N of M" framing). Single source of truth for which
+# stages run lives in scripts/lib/stage-plan.sh; see its contract. The
+# plan is built from the flags below, after argument parsing.
+source "${SCRIPT_DIR}/lib/stage-plan.sh"
+
 # ── Argument parsing ──────────────────────────────────────────────────────────
 USB_MODE="all"        # all | data | boot
 UPDATE_ONLY=0
@@ -51,6 +56,13 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+# Build the stage plan from the parsed flags, so "Stage N of M" reflects
+# exactly the stages that will run. compute_stage_plan (stage-plan.sh)
+# is the single source of truth; each stage_header call below must have
+# a matching label there. tests/test-run-step.sh enforces the match.
+mapfile -t STAGES < <(compute_stage_plan "$USB_MODE" "$UPDATE_ONLY")
+stage_plan "${STAGES[@]}"
 
 # ── Post-condition helpers ────────────────────────────────────────────────────
 # Each writes its diagnostic to stderr on failure and returns non-zero.
@@ -134,7 +146,7 @@ verify_data_usb_checksums() {
 }
 
 # ── Phase 0: Runtime detection ────────────────────────────────────────────────
-header "Runtime detection"
+stage_header "Runtime detection"
 
 if command -v docker >/dev/null 2>&1; then
     ok "Container runtime: docker"
@@ -145,7 +157,7 @@ fi
 
 # ── Phase 1: USB detection and assignment ─────────────────────────────────────
 if [ "$UPDATE_ONLY" -eq 0 ]; then
-    header "USB detection"
+    stage_header "USB detection"
 
     # How many USB devices do we need?
     case "$USB_MODE" in
@@ -199,9 +211,9 @@ if [ "$UPDATE_ONLY" -eq 0 ]; then
         echo -e "  Device: ${C_BOLD}${DEV}${C_RESET}  ${USB_INFO[$DEV]}"
         echo -e "  Role  : ${C_BOLD}${ROLE}${C_RESET}"
         echo ""
-        read -r -p "  Use this device? [Y/n] " CONFIRM
-        CONFIRM="${CONFIRM:-y}"
-        [[ "$CONFIRM" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
+        if ! confirm_destructive "  Use this device? [y to confirm] "; then
+            echo "Aborted."; exit 0
+        fi
         ROLE_ASSIGNMENT["$ROLE"]="$DEV"
     else
         # Multiple devices — present numbered list, ask admin to assign each role.
@@ -243,14 +255,14 @@ if [ "$UPDATE_ONLY" -eq 0 ]; then
             printf "    %-16s  %s  %s\n" "$ROLE" "$DEV" "${USB_INFO[$DEV]}"
         done
         echo ""
-        read -r -p "  Proceed? [Y/n] " CONFIRM
-        CONFIRM="${CONFIRM:-y}"
-        [[ "$CONFIRM" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
+        if ! confirm_destructive "  Proceed? [y to confirm] "; then
+            echo "Aborted."; exit 0
+        fi
     fi
 fi
 
 # ── Phase 2: Preflight checks ─────────────────────────────────────────────────
-header "Preflight checks"
+stage_header "Preflight checks"
 
 PREFLIGHT_FAIL=0
 
@@ -304,7 +316,14 @@ fi
 # `make update` and an admin running troskel-build.sh both go through the
 # same target. Container output streams to stdout so the user sees real
 # progress during the rebuild rather than a silent prompt that looks hung.
-header "Updating artefacts (via make update)"
+stage_header "Updating artefacts"
+
+# This stage downloads signatures and rebuilds the scanner image; it is
+# the longest in a typical run. Announce a range so the streamed output
+# (and, on the write stages, the heartbeat) has a reference the operator
+# can judge against. Range, not a point estimate: time varies with
+# bandwidth and whether the image cache is warm.
+progress "Refreshing signatures and rebuilding (typically 5-20 min, first run longer)..."
 
 cd "$PROJECT_ROOT"
 if ! make update; then
@@ -324,7 +343,7 @@ if [ "$UPDATE_ONLY" -eq 1 ]; then
 fi
 
 # ── Phase 4: Write USBs ───────────────────────────────────────────────────────
-header "Writing USBs"
+stage_header "Writing USBs"
 
 # Inner scripts (prepare-data-usb.sh, prepare-boot-usb.sh) carry their
 # own "Continue? [y/N]" confirmation prompt as a safety net for direct
@@ -344,7 +363,7 @@ trap 'rm -f "$PASSPHRASE_FILE"' EXIT
 if [ "$USB_MODE" = "all" ] || [ "$USB_MODE" = "data" ]; then
     DATA_DEV="${ROLE_ASSIGNMENT[TROSKEL-DATA]}"
     POSTCOND=postcond_data_usb_written run_step \
-        "Writing TROSKEL-DATA (${DATA_DEV})" \
+        "Writing TROSKEL-DATA (${DATA_DEV}) (typically 3-8 min)" \
         bash "${SCRIPT_DIR}/prepare-data-usb.sh" "$DATA_DEV"
 fi
 
@@ -360,7 +379,7 @@ fi
 # below reads clean command output.
 if [ "$USB_MODE" = "all" ] || [ "$USB_MODE" = "boot" ]; then
     BOOT_DEV="${ROLE_ASSIGNMENT[TROSKEL-BOOT]}"
-    progress "Writing TROSKEL-BOOT (${BOOT_DEV})..."
+    progress "Writing TROSKEL-BOOT (${BOOT_DEV}) (typically 10-15 min)..."
     if [ "$DEBUG" -eq 1 ]; then
         if ! bash "${SCRIPT_DIR}/prepare-boot-usb.sh" "$BOOT_DEV"; then
             fail "TROSKEL-BOOT write failed"
@@ -449,7 +468,7 @@ if [ "$USB_MODE" = "all" ] || [ "$USB_MODE" = "boot" ]; then
 fi
 
 # ── Phase 5: Verification ─────────────────────────────────────────────────────
-header "Verification"
+stage_header "Verification"
 
 if [ "$USB_MODE" = "all" ] || [ "$USB_MODE" = "data" ]; then
     run_step "Verifying TROSKEL-DATA checksums" verify_data_usb_checksums

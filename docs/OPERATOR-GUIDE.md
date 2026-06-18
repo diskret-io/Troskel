@@ -1,12 +1,12 @@
 # OPERATOR GUIDE
 
-For when a scan does not produce a green verdict, or when `check-system-ready` reports a failure. Covers the operator-visible cases only — anything not listed here, or anything you are unsure about, contact the admin.
+For when a scan does not produce a green verdict, or when `check-system-ready` reports a failure. Covers the operator-visible cases only. Anything not listed here, or anything you are unsure about, contact the admin.
 
 This guide is technical. Site policy on what to do with flagged file USBs (return to sender, retain, destroy, log) is set locally and is not covered here.
 
 ---
 
-## The file USB — preparing files for scanning
+## The file USB: preparing files for scanning
 
 The file USB is a standard USB storage device containing the files you want to transfer into the air-gapped environment. It is separate from the TROSKEL-BOOT and TROSKEL-DATA USBs used by the scanning host itself.
 
@@ -16,7 +16,7 @@ The narrower supported set reduces the host's exposure to malicious filesystem i
 
 There is no other special preparation required. Copy the files to the USB as you normally would on any machine.
 
-**What to put on it:** The files you intend to transfer — documents, software packages, datasets, or anything else. Organise them however you like. `troskel` scans everything on the USB recursively, including files inside subdirectories.
+**What to put on it:** The files you intend to transfer: documents, software packages, datasets, or anything else. Organise them however you like. `troskel` scans everything on the USB recursively, including files inside subdirectories.
 
 **What the scanner does with it:** `troskel` detects the file USB automatically when you run it, mounts it read-only, copies its contents into the Firecracker microVM as a read-only block device, and scans everything inside. The USB itself is never written to during the scan. After the scan completes the USB is unmounted and you can remove it safely.
 
@@ -24,9 +24,9 @@ There is no other special preparation required. Copy the files to the USB as you
 
 ---
 
-## Scan session — step by step
+## Scan session: step by step
 
-1. **Prepare the file USB** on any networked machine — copy the files you want to transfer onto a standard USB drive.
+1. **Prepare the file USB** on any networked machine. Copy the files you want to transfer onto a standard USB drive.
 
 2. **Transport** the file USB and yourself to the air-gapped room.
 
@@ -47,12 +47,12 @@ There is no other special preparation required. Copy the files to the USB as you
    ```
    troskel
    ```
-   The scan runs automatically — it detects the file USB, mounts it, scans everything on it, and displays the verdict. Do not remove any USB during the scan.
+   The scan runs automatically. It detects the file USB, mounts it, scans everything on it, and displays the verdict. Do not remove any USB during the scan.
 
 8. **Read the verdict:**
-   - **GREEN** — files may be transferred. Remove the file USB and carry it to the destination.
-   - **RED** — do not transfer. See the Red verdict section below.
-   - **YELLOW** — something went wrong with the scanner itself. Contact the admin.
+   - **GREEN**: files may be transferred. Remove the file USB and carry it to the destination.
+   - **RED**: do not transfer. See the Red verdict section below.
+   - **YELLOW**: something went wrong with the scanner itself. Contact the admin.
 
 9. **Power off when finished:**
    ```
@@ -64,7 +64,7 @@ There is no other special preparation required. Copy the files to the USB as you
 
 ## Verdicts
 
-### Green — `*** CLEAN — Files may proceed ***`
+### Green: `*** CLEAN — Files may proceed ***`
 
 Both engines completed and neither flagged anything. Files may be transferred. Power off when finished:
 
@@ -72,7 +72,7 @@ Both engines completed and neither flagged anything. Files may be transferred. P
 sudo poweroff
 ```
 
-### Red — `*** THREAT DETECTED — DO NOT TRANSFER ***`
+### Red: `*** THREAT DETECTED — DO NOT TRANSFER ***`
 
 At least one engine flagged at least one file. The per-engine breakdown under the verdict block tells you which:
 
@@ -85,9 +85,9 @@ Below the breakdown, the screen lists the specific files that were flagged toget
 
 Do not transfer any files from the file USB, not just the flagged ones. A file USB on which any item flagged is treated as untrusted in its entirety.
 
-The scan log lives in tmpfs and will be lost when you power off — if the admin needs the log, photograph the screen before powering off.
+The scan log lives in tmpfs and will be lost when you power off. If the admin needs the log, photograph the screen before powering off.
 
-### Yellow — `*** RESULT UNCLEAR — Contact admin ***`
+### Yellow: `*** RESULT UNCLEAR — Contact admin ***`
 
 Neither a clean nor a threat verdict was produced. This means something went wrong with the scanning infrastructure itself — the VM crashed, ran out of memory, or produced unrecognisable output. The files have not been scanned. Do not transfer them.
 
@@ -152,7 +152,7 @@ The freshness file is missing entirely. The data USB is malformed or did not loa
 
 When contacting the admin, the useful information is:
 
-- The output of `show-status` — share this first.
-- The output of `check-system-ready` — identifies which check failed.
+- The output of `show-status`: share this first.
+- The output of `check-system-ready`: identifies which check failed.
 - The scan log if a yellow verdict occurred: `cat /var/log/troskel/scan-*.log`
-- The signature date shown in `show-status` — this tells the admin whether a fresh data USB is needed.
+- The signature date shown in `show-status`: this tells the admin whether a fresh data USB is needed.

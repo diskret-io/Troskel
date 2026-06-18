@@ -51,7 +51,7 @@ After first-time setup, the regular workflow is `sudo bash scripts/troskel-build
 
 ## What troskel-build.sh actually does
 
-Six phases, visible in the script output:
+The phases that run depend on the mode. In the default `--usb-all` run they are:
 
 1. **Runtime detection** verifies Docker is available.
 2. **USB detection** enumerates connected USB block devices and assigns them to roles.
@@ -60,7 +60,13 @@ Six phases, visible in the script output:
 5. **USB writes** call `prepare-data-usb.sh` and `prepare-boot-usb.sh` on the assigned devices.
 6. **Verification** re-mounts the data USB read-only and verifies the SHA-256 checksums on the materialised rootfs.
 
-Each phase prints progress as it runs. With `--debug`, the full output of each sub-step is streamed; otherwise output is suppressed unless a step fails.
+`--update` skips the USB detection, write, and verification stages; `--usb-boot` skips verification (there is no data USB to check). 
+
+### Confirmation prompts
+
+The script asks you to confirm before it writes to a device: in `--usb-all` mode you assign each USB to a role by number and then confirm the assignment, and in single-device modes you confirm the one device. These confirmations require you to type `y` (or `Y`) deliberately. Pressing Enter on its own does not confirm and re-asks the question.
+
+This is a deliberate safety behaviour, not a quirk. USB writes are destructive and irreversible, so the prompt will not accept an empty response or a keystroke buffered from an earlier stage as approval. If you have developed the habit of holding or tapping Enter to move through prompts, note that it no longer advances the destructive gates; type `y` when you have read and agree with what the prompt states.
 
 ## When things fail
 
