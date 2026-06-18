@@ -4,7 +4,7 @@
 # staging both into /var/lib/troskel/yara-rules/ for injection into the
 # scanner rootfs by build-scanner-image.sh.
 #
-# This script does not use loki-util — it fetches the upstream archives
+# This script does not use loki-util. It fetches the upstream archives
 # directly, which works on any system with curl and unzip regardless of
 # whether loki-util can run (e.g. NixOS).
 #
@@ -109,8 +109,8 @@ fi
 
 rm -rf "$RULES_OUT"
 # LOKI-RS expects this exact directory structure under signatures/:
-#   signatures/yara/      — .yar rule files
-#   signatures/iocs/      — hash-iocs.txt, filename-iocs.txt, c2-iocs.txt
+#   signatures/yara/      - .yar rule files
+#   signatures/iocs/      - hash-iocs.txt, filename-iocs.txt, c2-iocs.txt
 mkdir -p "${RULES_OUT}/yara"
 mkdir -p "${RULES_OUT}/iocs"
 

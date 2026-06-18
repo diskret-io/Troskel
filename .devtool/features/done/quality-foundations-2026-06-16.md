@@ -25,20 +25,20 @@ are sound" rather than "the documentation is polished".
 
 All six sub-cards delivered:
 
-- `extend-system-prompt-quality-bar` — operative rules in the
+- `extend-system-prompt-quality-bar`: operative rules in the
   contributor instructions.
-- `write-quality-md` — `QUALITY.md` at the repo root, the
+- `write-quality-md`, `QUALITY.md` at the repo root, the
   rationale source.
-- `fix-orchestrator-failure-propagation` — orchestrator's
+- `fix-orchestrator-failure-propagation`: orchestrator's
   `run_step` gained POSTCOND; inner-script `|| true` patterns
   removed.
-- `negative-case-test-sidecar` — `tests/test-usb-verify.sh`
+- `negative-case-test-sidecar`, `tests/test-usb-verify.sh`
   exercises the sidecar protocol; catches the absolute-path
   bug class at introduction.
-- `negative-case-test-orchestrator` — `tests/test-run-step.sh`
+- `negative-case-test-orchestrator`, `tests/test-run-step.sh`
   exercises the orchestrator's failure-mode discipline; catches
   silent-success failures.
-- `ci-surface-pipeline` — verified the three-tier CI runs on
+- `ci-surface-pipeline`: verified the three-tier CI runs on
   the right triggers; both negative-case tests run under CI.
 
 ## Why it mattered

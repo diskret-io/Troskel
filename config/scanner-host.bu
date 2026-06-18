@@ -8,7 +8,7 @@ passwd:
       # The hash below is a sentinel. prepare-boot-usb.sh generates a
       # fresh passphrase at build time, hashes it with openssl passwd -6,
       # and substitutes the hash into a temp copy of this file before
-      # invoking butane. Do not edit by hand — the committed value is
+      # invoking butane. Do not edit by hand, the committed value is
       # not a usable hash.
       password_hash: "@@SCANNER_PASSWORD_HASH@@"
 

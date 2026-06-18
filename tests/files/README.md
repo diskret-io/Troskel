@@ -26,7 +26,7 @@ ZIP containing one benign text file, encrypted with the password
 `--alert-encrypted-archive` flag (introduced in the clamav-tightening work).
 Used by `test-scan.sh` to confirm that flag is engaged.
 
-The ZIP itself contains nothing malicious — the value is structural, not
+The ZIP itself contains nothing malicious, the value is structural, not
 content. ClamAV flags it because the scanner cannot inspect its contents,
 not because of what's inside.
 
@@ -42,9 +42,9 @@ cd - && rm -rf /tmp/encgen
 
 The `zip -e -P` form bakes the password into the archive non-interactively.
 Bump the password by editing this recipe and `test-scan.sh`'s assertion if
-needed — neither value is sensitive (the file is a test fixture, not real
+needed. Neither value is sensitive (the file is a test fixture, not real
 encryption).
 
 Requires `zip` on the host running the regeneration. `zip` is not on
-`prepare-build-machine.sh`'s install list because it is only used here —
-install separately on the rare occasion this fixture needs to be rebuilt.
+`prepare-build-machine.sh`'s install list because it is only used here. 
+Install separately on the rare occasion this fixture needs to be rebuilt.

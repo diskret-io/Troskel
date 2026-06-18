@@ -1,5 +1,5 @@
 #!/bin/bash
-# scan-wrap — host-side Firecracker wrapper
+# scan-wrap: host-side Firecracker wrapper
 # Usage: scan-wrap <directory-to-scan>
 #
 # Phase 0 hardening (interim mitigation for docs/roadmap/ingest-vm.md):
@@ -40,7 +40,7 @@ WORK="$(mktemp -d --tmpdir troskel-XXXXXX)"
 SCANNER_ENV="${SIGDIR}/scanner.env"
 # shellcheck source=/dev/null
 [ -f "$SCANNER_ENV" ] && source "$SCANNER_ENV"
-# Defaults — match scanner.env defaults so scan-wrap works on a dev host
+# Defaults: match scanner.env defaults so scan-wrap works on a dev host
 # where scanner.env may not be present (e.g. during make scan in CI).
 GUEST_VCPU_COUNT="${GUEST_VCPU_COUNT:-2}"
 GUEST_MEM_MIB="${GUEST_MEM_MIB:-2048}"
@@ -221,7 +221,7 @@ cat > "${WORK}/fc-config.json" <<EOF
 }
 EOF
 
-echo "[*] Starting scan — this may take several minutes..."
+echo "[*] Starting scan. This may take several minutes..."
 echo "[*] Log: $SCAN_LOG"
 echo ""
 
@@ -263,7 +263,7 @@ summarise_engine() {
     esac
 }
 
-# show_findings — display flagged items from the scan log in a readable
+# show_findings: display flagged items from the scan log in a readable
 # format for the operator. Extracts ClamAV FOUND lines and LOKI-RS ALERT
 # records, strips internal paths, and truncates at MAX_FINDINGS items.
 show_findings() {

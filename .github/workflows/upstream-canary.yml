@@ -30,8 +30,8 @@ on:
     # Daily reachability + weekly full build. Offset minutes (17, 13) to
     # avoid the top-of-hour scheduler contention that delays Actions
     # cron jobs by tens of minutes on busy days. Times are UTC.
-    - cron: '17 6 * * *'    # daily 06:17 UTC — reachability only
-    - cron: '13 7 * * 1'    # Mondays 07:13 UTC — full build (also runs reachability)
+    - cron: '17 6 * * *'    # daily 06:17 UTC - reachability only
+    - cron: '13 7 * * 1'    # Mondays 07:13 UTC - full build (also runs reachability)
   workflow_dispatch:
 
 permissions:

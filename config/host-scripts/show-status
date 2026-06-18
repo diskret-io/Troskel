@@ -35,7 +35,7 @@ fi
 # this block prints "unknown" for every identity field, which is exactly
 # what prepare-data-usb.sh tells the operator to expect. If that promise
 # and this behaviour drift apart, fix both. Parsing without jq (not
-# installed on the scanning host) — fields are stable, grep+sed suffices.
+# installed on the scanning host), fields are stable, grep+sed suffices.
 MANIFEST="/var/lib/troskel/build-manifest.json"
 echo ""
 echo "=== Scanner build ==="

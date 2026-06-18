@@ -16,7 +16,7 @@
 # Privileges:
 #   Tier 2 (test-build) needs --privileged for debootstrap and mkfs.ext4.
 #   Tier 3 (test-scan)  needs --privileged and /dev/kvm for Firecracker.
-#   Docker runs containers as root via its daemon — plain --privileged is
+#   Docker runs containers as root via its daemon, plain --privileged is
 #   sufficient.
 #
 # Artefact persistence:
@@ -38,7 +38,7 @@ COREOS_INSTALLER_TAG := $(shell . $(VERSIONS) && echo $$COREOS_INSTALLER_TAG)
 
 TROSKEL_VERSION := $(shell . $(VERSIONS) && echo $$TROSKEL_VERSION)
 ifeq ($(strip $(TROSKEL_VERSION)),)
-  $(error TROSKEL_VERSION empty — config/versions.env missing or unreadable)
+  $(error TROSKEL_VERSION empty: config/versions.env missing or unreadable)
 endif
 
 # Docker is required.
@@ -47,11 +47,11 @@ ifeq ($(RUNTIME),)
   $(error Docker not found. Install Docker: https://docs.docker.com/engine/install/)
 endif
 
-# Docker runs containers as root via its daemon — plain --privileged is
+# Docker runs containers as root via its daemon, plain --privileged is
 # sufficient for debootstrap and mkfs.ext4 inside the container.
 PRIV_FLAGS := --privileged
 
-# Common run flags. IMAGE_NAME must come last — everything after it is
+# Common run flags. IMAGE_NAME must come last, everything after it is
 # treated as the command to run inside the container.
 RUN_FLAGS_BASE := run --rm \
     --volume "$(CURDIR):/troskel:z" \
@@ -78,7 +78,7 @@ check-kvm:
 	@echo "[+] /dev/kvm available."
 
 # Internal target: verify that privileged containers can perform the
-# operations the build pipeline needs (mknod — required by debootstrap
+# operations the build pipeline needs (mknod, required by debootstrap
 # and mkfs.ext4). A plain 'true' passes even when these are denied.
 check-priv:
 	@if ! $(RUNTIME) run --rm $(PRIV_FLAGS) $(IMAGE_NAME) \
@@ -106,16 +106,16 @@ image: Dockerfile $(VERSIONS)
 update: image
 	$(RUN_PRIVILEGED) bash scripts/run-update.sh
 
-## Tier 1 — Butane validation + shellcheck. No privileges needed.
+## Tier 1: Butane validation + shellcheck. No privileges needed.
 validate: image
 	$(RUN_BASE) bash tests/test-validate.sh
 
-## Tier 2 — Full build pipeline (debootstrap, image build). Needs --privileged.
+## Tier 2: Full build pipeline (debootstrap, image build). Needs --privileged.
 test-build: image check-priv
 	$(RUNTIME) volume create $(VOLUME_NAME) 2>/dev/null || true
 	$(RUN_PRIVILEGED) bash tests/test-build.sh
 
-## Tier 3 — Firecracker scan test. Needs --privileged + /dev/kvm.
+## Tier 3: Firecracker scan test. Needs --privileged + /dev/kvm.
 test-scan: image check-kvm check-priv
 	$(RUN_PRIVILEGED_KVM) bash tests/test-scan.sh
 

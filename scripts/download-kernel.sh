@@ -49,7 +49,7 @@ CI_VERSION="${FC_VERSION%.*}"   # v1.7.0 -> v1.7
 #
 # Ownership is captured by numeric UID/GID rather than names, because in
 # containers (CI, build images) the file's owner often has no matching
-# /etc/passwd entry — stat -c '%U:%G' returns "UNKNOWN:UNKNOWN" in that
+# /etc/passwd entry. Stat -c '%U:%G' returns "UNKNOWN:UNKNOWN" in that
 # case, which chown rejects. Numeric IDs always resolve.
 #
 # Only updates if the current on-disk value is the empty string. This is
@@ -119,9 +119,62 @@ fi
 
 KERNEL_URL="https://s3.amazonaws.com/spec.ccfc.min/${KERNEL_KEY}"
 
+# ── Verify against the destination before reaching for the network ────────────
+# In verify mode the recorded SHA-256 is the source of truth for what the
+# kernel on disk must be. Hash the kernel already at $KERNEL_OUT and, if it
+# matches, we are done: no download, no network. This is the destination-
+# verification the quality bar requires (we check what was actually
+# materialised, not a fresh fetch), and it is what makes an offline build
+# possible once the kernel has been pinned and downloaded once.
+#
+# Only if the on-disk kernel is absent or does not match do we fall through
+# to the download path below. Discover mode always downloads (there is
+# nothing recorded yet to verify against).
+#
+# CONTRACT (with tests/test-build.sh negative-path [b]): that test corrupts
+# the recorded KERNEL_SHA256 and leaves a real $KERNEL_OUT in place,
+# expecting "SHA-256 mismatch for guest kernel" and a non-zero exit WITHOUT
+# any network access. The on-disk compare below is what makes that test
+# deterministic and offline: a wrong recorded SHA against a present kernel
+# fails here, before the download block. The test must NOT delete
+# $KERNEL_OUT (doing so forces the network path, which hangs offline).
+if [ "$MODE" = "verify" ] && [ -f "$KERNEL_OUT" ]; then
+    ON_DISK_SHA="$(sha256sum "$KERNEL_OUT" | awk '{print $1}')"
+    if [ "$ON_DISK_SHA" = "$KERNEL_SHA256" ]; then
+        echo "[+] Kernel already present and verified against recorded SHA-256"
+        KSIZE="$(ls -lh "$KERNEL_OUT" | awk '{print $5}')"
+        echo "[+] Kernel ready: ${KERNEL_OUT} (${KSIZE})"
+        exit 0
+    fi
+    echo "[!] SHA-256 mismatch for guest kernel ${KERNEL_FILENAME}"
+    echo "    Expected : ${KERNEL_SHA256}"
+    echo "    Got      : ${ON_DISK_SHA}"
+    echo ""
+    echo "    The kernel on disk at ${KERNEL_OUT} does not match the value"
+    echo "    recorded in config/versions.env. Possible causes:"
+    echo "      - The Firecracker CI S3 bucket re-published this asset"
+    echo "        (rare but possible if the CI rebuild was triggered)."
+    echo "      - The on-disk kernel was corrupted or replaced."
+    echo "      - A man-in-the-middle substituted a tampered kernel."
+    echo ""
+    echo "    To re-fetch, delete ${KERNEL_OUT} and re-run; the download will"
+    echo "    verify the fresh copy against the recorded SHA-256. To accept a"
+    echo "    deliberate upstream change, blank KERNEL_RESOLVED and"
+    echo "    KERNEL_SHA256 in config/versions.env and re-run. Do not do this"
+    echo "    without first independently confirming the upstream change."
+    echo ""
+    exit 1
+fi
+
 # ── Download ──────────────────────────────────────────────────────────────────
+# Reached when: discover mode (always), or verify mode with no usable
+# kernel on disk. wget carries explicit timeouts and a bounded retry count
+# so an unreachable or stalled mirror fails with the connectivity message
+# below in bounded time rather than hanging indefinitely. The previous
+# version had no timeout and would hang on an air-gapped or flaky link.
 echo "[*] Downloading guest kernel: ${KERNEL_FILENAME}..."
 wget -q --show-progress \
+    --timeout=30 --tries=3 \
     -O "${KERNEL_OUT}.tmp" \
     "$KERNEL_URL" \
     || { echo "[!] Kernel download failed — check internet connectivity."; rm -f "${KERNEL_OUT}.tmp"; exit 1; }

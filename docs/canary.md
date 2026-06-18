@@ -21,7 +21,7 @@ Both are also triggerable manually from the **Actions** tab via "Run workflow". 
 
 ## What happens on failure
 
-The workflow opens (or comments on) a GitHub issue labelled `canary` and `upstream`. The issue title is stable per tier, so consecutive failures comment on the same issue rather than spawning new ones. Closing the issue resets the dedup state — the next failure opens a new one.
+The workflow opens (or comments on) a GitHub issue labelled `canary` and `upstream`. The issue title is stable per tier, so consecutive failures comment on the same issue rather than spawning new ones. Closing the issue resets the dedup state. The next failure opens a new one.
 
 Currently the owner, as watcher of the repo, gets a normal issue notification. So there should be no need to babysit the Actions tab.
 

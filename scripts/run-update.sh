@@ -9,7 +9,7 @@ set -euo pipefail
 SCRIPTS="$(dirname "$0")"
 
 echo "============================================="
-echo " Scanner update — $(date -u --iso-8601=seconds)"
+echo " Scanner update: $(date -u --iso-8601=seconds)"
 echo "============================================="
 echo ""
 
