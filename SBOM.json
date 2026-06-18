@@ -2,9 +2,9 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
   "version": 1,
-  "serialNumber": "urn:uuid:cc57699b-bd7d-42a5-b2f0-4726bfd1204d",
+  "serialNumber": "urn:uuid:0a9b2490-b737-47db-bf37-0c37edcb699c",
   "metadata": {
-    "timestamp": "2026-06-18T12:14:35+00:00",
+    "timestamp": "2026-06-18T12:48:13+00:00",
     "tools": {
       "components": [
         {
@@ -27,7 +27,7 @@
       "properties": [
         {"name": "project-type", "value": "security-tool"},
         {"name": "deployment-model", "value": "air-gapped"},
-        {"name": "troskel-commit", "value": "a80cdb2a771511c474cfbee4f8af822354bc2446"},
+        {"name": "troskel-commit", "value": "9fc2f619720c9b02565a16ef21f52b29bdb2b535"},
         {"name": "troskel-dirty", "value": "true"}
       ]
     },

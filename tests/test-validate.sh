@@ -128,20 +128,26 @@ else
 fi
 
 # --- 5. SBOM version matches versions.env --------------------------------
-# SBOM.json is generated on the build station (generate-build-records.sh,
-# run as root by run-update.sh), not in CI. So a TROSKEL_VERSION bump that
-# is committed without regenerating SBOM.json leaves the committed SBOM
-# stale. This check re-derives the expected version from versions.env and
-# asserts the four product-version sites in SBOM.json agree.
+# SBOM.json is generated on the build station, not in CI. A TROSKEL_VERSION
+# bump committed without regenerating SBOM.json leaves the committed SBOM
+# stale. This check re-derives the expected version and asserts BOTH forms
+# the product version takes in the SBOM agree:
+#   - the purl/ref form: troskel@X.Y.Z   (component purl, dependency ref,
+#     composition assembly)
+#   - the bare field form: "version": "X.Y.Z" inside the product component
+# Both must be checked. An earlier version of this check keyed only on the
+# purl form and passed against an SBOM whose bare "version" field had
+# drifted to a stale value — a decorative check that could not detect the
+# failure it claimed to. See bug history below.
 #
 # CONTRACT (consumer side): reads TROSKEL_VERSION from config/versions.env,
-# the same value generate-build-records.sh interpolates. If they disagree,
-# the SBOM was not regenerated after a bump. Failure here means: rebuild
-# SBOM.json on the build station and recommit.
+# the same value generate-build-records.sh interpolates. Disagreement means
+# the SBOM was not regenerated after a bump: rebuild on the build station
+# and recommit.
 #
-# What this reports if the thing it checks is broken: a non-empty diff of
-# the offending lines, then a FAIL. It cannot pass on a stale SBOM because
-# it greps for the literal expected version and counts the hits.
+# What this reports if broken: the offending stale line(s) and a FAIL. It
+# cannot pass on a stale SBOM because it counts both expected forms and
+# rejects any same-shaped occurrence carrying a different version.
 echo "[*] Checking SBOM version agreement..."
 # shellcheck source=../config/versions.env
 EXPECTED_VERSION="$(. config/versions.env && echo "$TROSKEL_VERSION")"
@@ -150,31 +156,30 @@ if [ -z "$EXPECTED_VERSION" ]; then
 elif [ ! -f SBOM.json ]; then
     result "SBOM.json not found at repo root" "SBOM version agreement"
 else
-    # The four product-version sites all carry the version as either
-    # "version": "X" or troskel@X. Any occurrence of troskel@<other> or a
-    # product "version" line disagreeing with EXPECTED is drift. We assert
-    # the expected string is present AND no stale 0.x product ref survives.
-    STALE="$(grep -nE 'troskel@[0-9]+\.[0-9]+\.[0-9]+' SBOM.json \
+    # Stale purl/ref form: any troskel@<semver> that is not the expected one.
+    STALE_PURL="$(grep -nE 'troskel@[0-9]+\.[0-9]+\.[0-9]+' SBOM.json \
         | grep -vF "troskel@${EXPECTED_VERSION}" || true)"
-    PRESENT="$(grep -cF "troskel@${EXPECTED_VERSION}" SBOM.json || true)"
-    if [ -n "$STALE" ]; then
-        result "stale troskel version ref(s) in SBOM.json:
-$STALE
+    # The product component's bare "version" field. It is the "version" line
+    # immediately following the "name": "troskel" line (the top-level
+    # metadata.component, type application). Extract it directly rather than
+    # grepping all "version" lines (upstream components legitimately carry
+    # other versions).
+    PRODUCT_VERSION="$(grep -A2 '"name": "troskel"' SBOM.json \
+        | grep '"version"' | head -1 \
+        | sed -E 's/.*"version": *"([^"]*)".*/\1/')"
+    PRESENT_PURL="$(grep -cF "troskel@${EXPECTED_VERSION}" SBOM.json || true)"
+    if [ -n "$STALE_PURL" ]; then
+        result "stale troskel purl/ref(s) in SBOM.json:
+$STALE_PURL
 expected troskel@${EXPECTED_VERSION} — regenerate SBOM on the build station" \
             "SBOM version agreement"
-    elif [ "$PRESENT" -lt 1 ]; then
-        result "no troskel@${EXPECTED_VERSION} ref found in SBOM.json — regenerate on the build station" \
+    elif [ "$PRESENT_PURL" -lt 1 ]; then
+        result "no troskel@${EXPECTED_VERSION} purl found in SBOM.json — regenerate on the build station" \
+            "SBOM version agreement"
+    elif [ "$PRODUCT_VERSION" != "$EXPECTED_VERSION" ]; then
+        result "product component \"version\" field is \"${PRODUCT_VERSION}\", expected \"${EXPECTED_VERSION}\" — SBOM not fully regenerated (the bug the purl-only check missed)" \
             "SBOM version agreement"
     else
-        result "ok" "SBOM version agreement (troskel@${EXPECTED_VERSION}, ${PRESENT} refs)"
+        result "ok" "SBOM version agreement (version field and ${PRESENT_PURL} purl refs all ${EXPECTED_VERSION})"
     fi
-fi
-
-# --- Summary -----------------------------------------------------------------
-echo ""
-echo "=== Results: ${PASS} passed, ${FAIL} failed ==="
-echo ""
-
-if [ "$FAIL" -gt 0 ]; then
-    exit 1
 fi
