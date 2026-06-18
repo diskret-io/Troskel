@@ -199,9 +199,9 @@ if [ "$UPDATE_ONLY" -eq 0 ]; then
         echo -e "  Device: ${C_BOLD}${DEV}${C_RESET}  ${USB_INFO[$DEV]}"
         echo -e "  Role  : ${C_BOLD}${ROLE}${C_RESET}"
         echo ""
-        read -r -p "  Use this device? [Y/n] " CONFIRM
-        CONFIRM="${CONFIRM:-y}"
-        [[ "$CONFIRM" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
+        if ! confirm_destructive "  Use this device? [y to confirm] "; then
+            echo "Aborted."; exit 0
+        fi
         ROLE_ASSIGNMENT["$ROLE"]="$DEV"
     else
         # Multiple devices — present numbered list, ask admin to assign each role.
@@ -243,9 +243,9 @@ if [ "$UPDATE_ONLY" -eq 0 ]; then
             printf "    %-16s  %s  %s\n" "$ROLE" "$DEV" "${USB_INFO[$DEV]}"
         done
         echo ""
-        read -r -p "  Proceed? [Y/n] " CONFIRM
-        CONFIRM="${CONFIRM:-y}"
-        [[ "$CONFIRM" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
+        if ! confirm_destructive "  Proceed? [y to confirm] "; then
+            echo "Aborted."; exit 0
+        fi
     fi
 fi
 

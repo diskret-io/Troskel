@@ -1,15 +1,15 @@
 ---
 id: "orchestrator-progress-rewrite-2026-06-16"
-status: "in-progress"
+status: "superseded"
 priority: "medium"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-16T18:25:11.785Z"
-modified: "2026-06-18T15:46:22.806Z"
+modified: "2026-06-18T00:00:00.000Z"
 completedAt: null
 labels: ["refactor", "infra"]
-order: "a0"
+order: "a1"
 ---
 # Orchestrator progress reporting rewrite
 
@@ -20,6 +20,38 @@ misinterpreted as confirmation prompts.
 
 Full details and three implementation shapes in the existing
 roadmap doc: `docs/roadmap/build-orchestrator-progress.md`.
+
+## Status: superseded
+
+This umbrella card is superseded by
+`orchestrator-progress-prompts-2026-06-18`, which carries the
+remaining scope. It is closed as superseded, not done: the full
+target state has not shipped. Tracking the outstanding work under
+two cards would be drift, so the remaining scope lives in the
+single follow-up card.
+
+What shipped under this card:
+
+- Failure context. `run_step` dumps captured output inline on
+  failure rather than burying it behind a `--debug` rerun
+  (landed with the 1.0.0 safety work,
+  `fix-orchestrator-failure-propagation-2026-06-16`).
+- Looks-hung, for the two captured USB-write stages. A liveness
+  heartbeat was added to `_run_capture_with_heartbeat` in
+  `scripts/lib/run-step.sh` and threaded through both the data
+  and boot write paths (2026-06-18). Phase 3 (`make update`)
+  already streamed live and was never silent.
+
+What remains (now tracked by
+`orchestrator-progress-prompts-2026-06-18`):
+
+- Prompt framing: destructive confirmations are not visually
+  distinct from progress output and accept a bare Enter as yes.
+- Stage boundaries: no "Stage N of M" indicator, no per-stage
+  expected-duration framing.
+
+When the follow-up card lands in full, delete
+`docs/roadmap/build-orchestrator-progress.md`.
 
 ## Acceptance criteria
 
