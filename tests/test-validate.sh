@@ -127,6 +127,49 @@ else
     cat /tmp/rs-out.txt | sed 's/^/         /'
 fi
 
+# --- 5. SBOM version matches versions.env --------------------------------
+# SBOM.json is generated on the build station (generate-build-records.sh,
+# run as root by run-update.sh), not in CI. So a TROSKEL_VERSION bump that
+# is committed without regenerating SBOM.json leaves the committed SBOM
+# stale. This check re-derives the expected version from versions.env and
+# asserts the four product-version sites in SBOM.json agree.
+#
+# CONTRACT (consumer side): reads TROSKEL_VERSION from config/versions.env,
+# the same value generate-build-records.sh interpolates. If they disagree,
+# the SBOM was not regenerated after a bump. Failure here means: rebuild
+# SBOM.json on the build station and recommit.
+#
+# What this reports if the thing it checks is broken: a non-empty diff of
+# the offending lines, then a FAIL. It cannot pass on a stale SBOM because
+# it greps for the literal expected version and counts the hits.
+echo "[*] Checking SBOM version agreement..."
+# shellcheck source=../config/versions.env
+EXPECTED_VERSION="$(. config/versions.env && echo "$TROSKEL_VERSION")"
+if [ -z "$EXPECTED_VERSION" ]; then
+    result "versions.env did not yield TROSKEL_VERSION" "SBOM version agreement"
+elif [ ! -f SBOM.json ]; then
+    result "SBOM.json not found at repo root" "SBOM version agreement"
+else
+    # The four product-version sites all carry the version as either
+    # "version": "X" or troskel@X. Any occurrence of troskel@<other> or a
+    # product "version" line disagreeing with EXPECTED is drift. We assert
+    # the expected string is present AND no stale 0.x product ref survives.
+    STALE="$(grep -nE 'troskel@[0-9]+\.[0-9]+\.[0-9]+' SBOM.json \
+        | grep -vF "troskel@${EXPECTED_VERSION}" || true)"
+    PRESENT="$(grep -cF "troskel@${EXPECTED_VERSION}" SBOM.json || true)"
+    if [ -n "$STALE" ]; then
+        result "stale troskel version ref(s) in SBOM.json:
+$STALE
+expected troskel@${EXPECTED_VERSION} — regenerate SBOM on the build station" \
+            "SBOM version agreement"
+    elif [ "$PRESENT" -lt 1 ]; then
+        result "no troskel@${EXPECTED_VERSION} ref found in SBOM.json — regenerate on the build station" \
+            "SBOM version agreement"
+    else
+        result "ok" "SBOM version agreement (troskel@${EXPECTED_VERSION}, ${PRESENT} refs)"
+    fi
+fi
+
 # --- Summary -----------------------------------------------------------------
 echo ""
 echo "=== Results: ${PASS} passed, ${FAIL} failed ==="

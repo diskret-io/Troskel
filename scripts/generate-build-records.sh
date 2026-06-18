@@ -35,6 +35,14 @@ source "$VERSIONS_FILE"
 SERIAL="urn:uuid:$(uuidgen)"
 TIMESTAMP="$(date -u --iso-8601=seconds)"
 
+# Fail loudly if the version source did not provide what the heredocs
+# below interpolate. Without this, an unset TROSKEL_VERSION produces
+# `"version": ""` and `pkg:generic/troskel@` in a still-syntactically-valid
+# SBOM — a silent drift the operator would not see. See the CONTRACT note
+# in config/versions.env (consumer side).
+: "${TROSKEL_VERSION:?versions.env did not set TROSKEL_VERSION}"
+: "${TROSKEL_BUILD_RECORDS_GENERATOR_VERSION:?versions.env did not set TROSKEL_BUILD_RECORDS_GENERATOR_VERSION}"
+
 # ── Build environment ─────────────────────────────────────────────────────────
 TROSKEL_COMMIT="$(git -C "$PROJECT_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
 # `git status --porcelain` returns the empty string iff the working tree
@@ -131,20 +139,20 @@ cat > "${SBOM_OUT}.new" <<JSON
         {
           "type": "application",
           "name": "troskel-build-records-generator",
-          "version": "0.9.1",
+          "version": "${TROSKEL_BUILD_RECORDS_GENERATOR_VERSION}",
           "vendor": "troskel-project",
           "description": "Generates SBOM.json and build-manifest.json from versions.env and build-station state. See scripts/generate-build-records.sh."
         }
       ]
     },
-    "component": {
+        "component": {
       "type": "application",
       "name": "troskel",
-      "version": "0.9.1",
+      "version": "${TROSKEL_VERSION}",
       "description": "Air-gapped file-crossing scanner",
       "supplier": {"name": "Diskret Team"},
       "licenses": [{"license": {"id": "MIT"}}],
-      "purl": "pkg:generic/troskel@0.9.1",
+      "purl": "pkg:generic/troskel@${TROSKEL_VERSION}",
       "properties": [
         {"name": "project-type", "value": "security-tool"},
         {"name": "deployment-model", "value": "air-gapped"},
@@ -368,7 +376,7 @@ cat > "${SBOM_OUT}.new" <<JSON
   ],
   "dependencies": [
     {
-      "ref": "pkg:generic/troskel@0.9.1",
+      "ref": "pkg:generic/troskel@${TROSKEL_VERSION}",
       "dependsOn": [
         "pkg:generic/fedora-coreos@stable",
         "pkg:github/firecracker-microvm/firecracker@${FC_VERSION}",
@@ -404,7 +412,7 @@ cat > "${SBOM_OUT}.new" <<JSON
   "compositions": [
     {
       "aggregate": "complete",
-      "assemblies": ["pkg:generic/troskel@0.9.1"],
+      "assemblies": ["pkg:generic/troskel@${TROSKEL_VERSION}"],
       "note": "Generated from versions.env and build-station state by scripts/generate-build-records.sh."
     }
   ],
