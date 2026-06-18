@@ -422,6 +422,94 @@ fi
 rm -f "$OUT_FILE"
 pass "No ticker output after return; ticker is killed and reaped cleanly"
 
+# ── Test 10: confirm_destructive accepts y and Y ─────────────────────────────
+#
+# The explicit-assent path. Both lower and upper case confirm.
+
+step "Test 10: confirm_destructive accepts 'y' and 'Y'"
+
+for ANS in y Y; do
+    RC=0
+    (
+        # shellcheck disable=SC2034
+        DEBUG=0
+        # shellcheck source=../scripts/lib/run-step.sh
+        source "$LIB_FILE"
+        printf '%s\n' "$ANS" | { confirm_destructive "confirm? "; }
+    ) >/dev/null 2>&1 || RC=$?
+    if [ "$RC" -ne 0 ]; then
+        fail "confirm_destructive should accept '$ANS' as assent, returned $RC"
+    fi
+done
+pass "Both 'y' and 'Y' confirm"
+
+# ── Test 11: bare Enter does not confirm ─────────────────────────────────────
+#
+# Regression: the old [Y/n] gates defaulted to yes on empty input, so a
+# stray Enter confirmed a destructive write. confirm_destructive must
+# NOT proceed on empty input. Empty re-asks, so a stream of bare Enters
+# followed by EOF must end without ever returning 0. We feed only blank
+# lines; the read loop exhausts stdin and the final read fails (EOF),
+# which must not be treated as assent.
+
+step "Test 11: bare Enter does not confirm (looks-hung keystroke regression)"
+
+RC=0
+(
+    # shellcheck disable=SC2034
+    DEBUG=0
+    # shellcheck source=../scripts/lib/run-step.sh
+    source "$LIB_FILE"
+    # Three blank lines then EOF. None must confirm.
+    printf '\n\n\n' | { confirm_destructive "confirm? "; }
+) >/dev/null 2>&1 || RC=$?
+if [ "$RC" -eq 0 ]; then
+    fail "Bare Enter must never confirm a destructive step (got exit 0)"
+fi
+pass "Bare Enter does not confirm; empty input re-asks rather than proceeding"
+
+# ── Test 12: non-y input declines ────────────────────────────────────────────
+
+step "Test 12: a non-empty non-y answer declines"
+
+RC=0
+(
+    # shellcheck disable=SC2034
+    DEBUG=0
+    # shellcheck source=../scripts/lib/run-step.sh
+    source "$LIB_FILE"
+    printf 'n\n' | { confirm_destructive "confirm? "; }
+) >/dev/null 2>&1 || RC=$?
+if [ "$RC" -eq 0 ]; then
+    fail "A non-y answer ('n') should decline, got exit 0"
+fi
+pass "Non-y input declines cleanly"
+
+# ── Test 13: stray Enter before the prompt does not confirm ──────────────────
+#
+# The safety property, stated as the outcome the operator cares about: a
+# stray Enter arriving ahead of the prompt does not proceed the
+# destructive step. There is no stdin drain; the property holds because
+# the empty line is read as the answer, fails the y/Y check, and
+# re-asks (then declines at EOF) rather than confirming. A genuine 'y'
+# typed deliberately still works (test 10); this guards the stray case.
+
+step "Test 13: stray Enter before the prompt does not confirm"
+
+RC=0
+(
+    # shellcheck disable=SC2034
+    DEBUG=0
+    # shellcheck source=../scripts/lib/run-step.sh
+    source "$LIB_FILE"
+    # Simulate a stray Enter buffered before the gate, then EOF.
+    printf '\n' | { confirm_destructive "confirm? "; }
+) >/dev/null 2>&1 || RC=$?
+if [ "$RC" -eq 0 ]; then
+    fail "A stray Enter buffered before the prompt must not confirm (got exit 0)"
+fi
+pass "Stray pre-prompt input does not confirm the destructive step"
+
 # ── Done ─────────────────────────────────────────────────────────────────────
 
 step "Result"

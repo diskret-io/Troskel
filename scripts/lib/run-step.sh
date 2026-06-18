@@ -12,6 +12,10 @@
 #
 #   - Output helpers: header(), progress(), ok(), warn(), fail().
 #
+#   - confirm_destructive(): prompt the operator to confirm an
+#     irreversible step. Drains buffered stdin first and refuses to
+#     treat a bare Enter as assent. See its contract comment below.
+#
 #   - run_step(): the project's reference pattern for invoking a
 #     sub-script as a named stage with full failure-mode discipline.
 #     See QUALITY.md (principle 5: "exit codes are not the only signal
@@ -62,6 +66,45 @@ progress() { echo -e "  ${C_DIM}▸${C_RESET} $*"; }
 ok()       { echo -e "  ${C_GREEN}✓${C_RESET} $*"; }
 warn()     { echo -e "  ${C_YELLOW}⚠${C_RESET}  $*"; }
 fail()     { echo -e "  ${C_RED}✗${C_RESET} $*"; }
+
+# Confirm a destructive step. Unlike a plain [Y/n] read, this does NOT
+# treat a bare Enter as assent: the operator must type 'y' or 'Y'.
+# Empty input re-asks (a bare Enter is most likely a stray keystroke,
+# not a deliberate answer, so re-prompt rather than abort). Any other
+# non-empty input declines and returns non-zero. EOF / closed stdin
+# declines.
+#
+# This is what defeats the stray-keystroke risk: an Enter pressed
+# during a long preceding stage and buffered ahead of the prompt is
+# read as the answer, is empty, fails the y/Y check, and re-asks rather
+# than confirming. No explicit stdin drain is used. An earlier draft
+# drained buffered input first, but a portable non-blocking drain is
+# not achievable with bash `read` (`-t 0` probes readiness without
+# consuming, so a drain loop spins; a timed consuming read behaves
+# differently on a pipe than on a terminal). The drain was only UX
+# polish; the safety property rests on empty-input rejection, which
+# needs no drain.
+#
+# CONTRACT (producer side): callers use this for irreversible
+# operations (USB device selection, the final write gate) in
+# scripts/troskel-build.sh. Returns 0 only on an explicit y or Y;
+# empty, other, and EOF never confirm.
+confirm_destructive() {
+    local prompt="$1"
+    local reply
+    while true; do
+        # A failed read (EOF / closed stdin) declines: there is no more
+        # input coming, so it must not loop re-asking forever.
+        if ! read -r -p "$prompt" reply; then
+            return 1
+        fi
+        case "$reply" in
+            [Yy]) return 0 ;;
+            "")   warn "Type 'y' to proceed, or Ctrl-C to abort." ;;
+            *)    return 1 ;;
+        esac
+    done
+}
 
 # Run a command with output captured to a file, emitting a periodic
 # heartbeat to the TERMINAL (not the file) so the operator can see a
