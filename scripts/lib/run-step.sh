@@ -17,6 +17,11 @@
 #     See QUALITY.md (principle 5: "exit codes are not the only signal
 #     worth trusting") and the function's docstring below.
 #
+#   - _run_capture_with_heartbeat(): captures a command's output to a
+#     file while emitting a periodic liveness heartbeat to the terminal.
+#     Used by run_step's non-debug branch and by the hand-rolled boot-USB
+#     wrapper in troskel-build.sh. See its contract comment below.
+#
 # Contract with callers:
 #   - Callers must set DEBUG (0 or 1) before invoking run_step. When 1,
 #     sub-script output streams live; when 0, output is captured and
@@ -58,6 +63,70 @@ ok()       { echo -e "  ${C_GREEN}✓${C_RESET} $*"; }
 warn()     { echo -e "  ${C_YELLOW}⚠${C_RESET}  $*"; }
 fail()     { echo -e "  ${C_RED}✗${C_RESET} $*"; }
 
+# Run a command with output captured to a file, emitting a periodic
+# heartbeat to the TERMINAL (not the file) so the operator can see a
+# long-running stage is alive. Used only in non-debug mode, where the
+# command's own output is suppressed until failure.
+#
+# CONTRACT (producer side): the heartbeat writes solely to the
+# controlling terminal via the saved fd 3; the command's stdout and
+# stderr go solely to $OUT. These two streams are kept separate on
+# purpose. The captured-output-on-failure dump (run_step, below, and the
+# boot-USB wrapper in troskel-build.sh) reads $OUT and relies on it
+# containing ONLY the command's output, no heartbeat lines. Do not
+# redirect the heartbeat into $OUT or merge the fds: doing so corrupts
+# the failure dump that is the operator's only diagnostic, and in the
+# boot-USB case would let the passphrase-extraction awk capture a
+# heartbeat line as the passphrase. The ticker is guaranteed dead
+# (killed and waited) before this function returns, so no heartbeat line
+# can arrive after the stage's ok/fail line. Consumers: run_step's
+# non-debug branch; the hand-rolled boot wrapper in troskel-build.sh.
+#
+# HEARTBEAT_INTERVAL (seconds, default 10) is a test hook so the test
+# suite can exercise the liveness path quickly. It is not an operator
+# knob; the default is the only value the operator workflow uses.
+#
+# Returns the command's exit status. The point is liveness, not timing
+# precision.
+_run_capture_with_heartbeat() {
+    local OUT="$1"; shift
+    local LABEL_FOR_BEAT="$1"; shift
+    local interval="${HEARTBEAT_INTERVAL:-10}"
+
+    # Save the real terminal as fd 3 so the heartbeat can reach it even
+    # though we are about to point the command's stdout/stderr at $OUT.
+    exec 3>&1
+
+    "$@" > "$OUT" 2>&1 &
+    local cmd_pid=$!
+
+    (
+        local elapsed=0
+        while kill -0 "$cmd_pid" 2>/dev/null; do
+            sleep "$interval"
+            # Re-check after the sleep: the command may have finished
+            # during it, in which case we must not print a stale beat
+            # that would arrive after the stage's ok/fail line.
+            kill -0 "$cmd_pid" 2>/dev/null || break
+            elapsed=$((elapsed + interval))
+            echo -e "  ${C_DIM}▸ still working (${LABEL_FOR_BEAT}, ${elapsed}s elapsed)...${C_RESET}" >&3
+        done
+    ) &
+    local beat_pid=$!
+
+    # Wait for the real work and capture its status.
+    wait "$cmd_pid"
+    local rc=$?
+
+    # Tear the heartbeat down before returning so nothing prints after
+    # the caller's ok/fail line.
+    kill "$beat_pid" 2>/dev/null || true   # ticker may have already exited via its own loop condition; that race is harmless
+    wait "$beat_pid" 2>/dev/null || true   # reap the ticker; a non-zero status from the kill above is expected and ignored
+
+    exec 3>&-
+    return "$rc"
+}
+
 # Run a sub-script as a named stage. In normal mode suppress its output
 # and show a single progress/ok line; in debug mode stream everything.
 # Failure modes handled:
@@ -77,6 +146,13 @@ fail()     { echo -e "  ${C_RED}✗${C_RESET} $*"; }
 #      return from the post-condition fails the stage. The post-
 #      condition exists so "exit code 0" is no longer the only signal
 #      we trust.
+#
+#   3. A long stage produces no output for minutes and looks hung. In
+#      non-debug mode the command's output is suppressed, so a
+#      multi-minute USB write would otherwise print one progress line
+#      and then nothing. We route the captured invocation through
+#      _run_capture_with_heartbeat, which emits a periodic liveness
+#      line to the terminal without polluting the captured output.
 #
 # Usage:
 #   run_step "Label" command args...
@@ -103,7 +179,7 @@ run_step() {
     else
         local OUT
         OUT="$(mktemp)"
-        if ! "$@" > "$OUT" 2>&1; then
+        if ! _run_capture_with_heartbeat "$OUT" "$LABEL" "$@"; then
             fail "$LABEL"
             echo ""
             echo -e "${C_DIM}--- output ---${C_RESET}"

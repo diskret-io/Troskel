@@ -1,15 +1,15 @@
 ---
 id: "release-1.0.0-2026-06-17"
-status: "in-progress"
+status: "done"
 priority: "high"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-17T19:30:00.000Z"
-modified: "2026-06-18T12:15:28.395Z"
-completedAt: null
+modified: "2026-06-18T15:41:26.519Z"
+completedAt: "2026-06-18T15:41:26.519Z"
 labels: ["release", "docs"]
-order: "a0"
+order: "Zy"
 ---
 # Final drift pass and v1.0.0 tag
 

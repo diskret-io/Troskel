@@ -6,10 +6,10 @@ assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-17T18:50:48.770Z"
-modified: "2026-06-17T18:50:48.770Z"
+modified: "2026-06-18T15:47:18.769Z"
 completedAt: null
 labels: ["refactor", "security"]
-order: "a6"
+order: "a0V"
 ---
 # Parallel engines with per-engine isolation
 

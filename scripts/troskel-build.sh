@@ -353,7 +353,11 @@ fi
 # disposing of it. The wrapper otherwise follows the same shape as
 # run_step and shares the same failure-mode discipline: explicit exit
 # code propagation, post-condition check, captured output dumped on
-# failure.
+# failure. The capture is routed through _run_capture_with_heartbeat
+# (the same helper run_step uses) so this multi-minute write does not
+# look hung. Per that helper's contract, the heartbeat goes to the
+# terminal only and never into $OUT, so the passphrase-extraction awk
+# below reads clean command output.
 if [ "$USB_MODE" = "all" ] || [ "$USB_MODE" = "boot" ]; then
     BOOT_DEV="${ROLE_ASSIGNMENT[TROSKEL-BOOT]}"
     progress "Writing TROSKEL-BOOT (${BOOT_DEV})..."
@@ -369,7 +373,8 @@ if [ "$USB_MODE" = "all" ] || [ "$USB_MODE" = "boot" ]; then
         ok "TROSKEL-BOOT written (${BOOT_DEV})"
     else
         OUT="$(mktemp)"
-        if ! bash "${SCRIPT_DIR}/prepare-boot-usb.sh" "$BOOT_DEV" > "$OUT" 2>&1; then
+        if ! _run_capture_with_heartbeat "$OUT" "Writing TROSKEL-BOOT" \
+                bash "${SCRIPT_DIR}/prepare-boot-usb.sh" "$BOOT_DEV"; then
             fail "TROSKEL-BOOT write failed"
             echo ""
             echo -e "${C_DIM}--- output ---${C_RESET}"

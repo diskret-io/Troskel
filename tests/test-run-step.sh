@@ -17,6 +17,16 @@
 # generalises to QUALITY.md principle 5: exit codes are not the
 # only signal worth trusting.
 #
+# A later change added a liveness heartbeat to the non-debug
+# captured path (_run_capture_with_heartbeat). Long stages used to
+# print one progress line then fall silent for minutes, which
+# operators read as a hang (recorded near-miss: an operator pressed
+# Enter into the silence, which a later prompt could have consumed
+# as confirmation of a destructive step). Tests 6-9 below guard that
+# heartbeat and the failure modes the heartbeat itself could
+# introduce (leaking into the captured failure dump; an orphaned
+# ticker printing after the stage returns).
+#
 # This test exercises:
 #
 #   1. Happy path. Sub-script exits zero, no POSTCOND. Stage passes.
@@ -27,6 +37,12 @@
 #      is the test's primary purpose.
 #   4. Happy path with passing POSTCOND. Both signals must agree.
 #   5. POSTCOND one-shot (does not leak to next call).
+#   6. Long stage emits a heartbeat to the terminal.
+#   7. Heartbeat never leaks into the captured output, and a failing
+#      long stage's captured dump stays clean while its exit status
+#      propagates.
+#   8. Sub-interval stage emits no heartbeat.
+#   9. No ticker output arrives after the helper returns (orphan check).
 #
 # Invocation: `bash tests/test-run-step.sh` (no privilege needed;
 # no real files touched beyond mktemp scratch space).
@@ -239,6 +255,172 @@ if [ "$RC" -ne 0 ]; then
 fi
 rm -f "$OUT_FILE"
 pass "POSTCOND is correctly unset after the call"
+
+# ── Test 6: long stage emits a heartbeat ─────────────────────────────────────
+#
+# Regression: non-debug long stages used to be silent for their whole
+# duration, which operators read as a hang. run_step now routes the
+# captured invocation through _run_capture_with_heartbeat, which prints
+# a liveness line to the terminal every HEARTBEAT_INTERVAL seconds. The
+# interval is overridden to 1s here so the test runs quickly; the stage
+# sleeps past it. The heartbeat goes to the subshell's stdout (the
+# terminal fd the helper saves), which this test captures in $OUT_FILE.
+
+step "Test 6: long stage emits a heartbeat to the terminal"
+
+OUT_FILE="$(mktemp)"
+RC=0
+(
+    # shellcheck disable=SC2034
+    DEBUG=0
+    # shellcheck disable=SC2034
+    HEARTBEAT_INTERVAL=1
+    # shellcheck source=../scripts/lib/run-step.sh
+    source "$LIB_FILE"
+    run_step "long stage" bash -c 'sleep 2.5; echo done'
+) > "$OUT_FILE" 2>&1 || RC=$?
+
+if [ "$RC" -ne 0 ]; then
+    cat "$OUT_FILE"
+    rm -f "$OUT_FILE"
+    fail "Long happy stage should exit zero, got $RC"
+fi
+if ! grep -q "still working" "$OUT_FILE"; then
+    cat "$OUT_FILE"
+    rm -f "$OUT_FILE"
+    fail "Long stage should emit at least one heartbeat line (looks-hung regression)"
+fi
+if ! grep -q "long stage" "$OUT_FILE"; then
+    cat "$OUT_FILE"
+    rm -f "$OUT_FILE"
+    fail "Heartbeat line should carry the stage label"
+fi
+rm -f "$OUT_FILE"
+pass "Long stage emits a labelled heartbeat"
+
+# ── Test 7: heartbeat never leaks into captured output ───────────────────────
+#
+# The helper's contract is that the heartbeat reaches the terminal only,
+# never the captured $OUT, so the on-failure dump (and, for the boot
+# wrapper, the passphrase-extraction awk) reads clean command output.
+# This calls _run_capture_with_heartbeat directly so the captured file
+# is inspectable separately from the terminal. A failing long command
+# is used so we also confirm the exit status propagates and the captured
+# file holds the command's own stderr but no heartbeat lines.
+
+step "Test 7: heartbeat stays out of the captured output; exit status propagates"
+
+OUT_FILE="$(mktemp)"   # subshell stdout (the "terminal")
+CAP_FILE="$(mktemp)"   # the helper's captured command output
+RC=0
+(
+    # shellcheck disable=SC2034
+    DEBUG=0
+    # shellcheck disable=SC2034
+    HEARTBEAT_INTERVAL=1
+    # shellcheck source=../scripts/lib/run-step.sh
+    source "$LIB_FILE"
+    _run_capture_with_heartbeat "$CAP_FILE" "capture stage" \
+        bash -c 'sleep 2.5; echo "stderr detail here" >&2; exit 7'
+) > "$OUT_FILE" 2>&1 || RC=$?
+
+if [ "$RC" -ne 7 ]; then
+    cat "$OUT_FILE"; echo "--- captured ---"; cat "$CAP_FILE"
+    rm -f "$OUT_FILE" "$CAP_FILE"
+    fail "Helper should propagate the command's exit status (expected 7, got $RC)"
+fi
+if grep -q "still working" "$CAP_FILE"; then
+    echo "--- captured ---"; cat "$CAP_FILE"
+    rm -f "$OUT_FILE" "$CAP_FILE"
+    fail "Heartbeat leaked into the captured output — would corrupt the failure dump and passphrase extraction"
+fi
+if ! grep -q "stderr detail here" "$CAP_FILE"; then
+    echo "--- captured ---"; cat "$CAP_FILE"
+    rm -f "$OUT_FILE" "$CAP_FILE"
+    fail "Captured output should hold the command's own stderr for the dump"
+fi
+if ! grep -q "still working" "$OUT_FILE"; then
+    cat "$OUT_FILE"
+    rm -f "$OUT_FILE" "$CAP_FILE"
+    fail "Heartbeat should still have reached the terminal during the long stage"
+fi
+rm -f "$OUT_FILE" "$CAP_FILE"
+pass "Heartbeat reaches the terminal only; capture stays clean; exit status propagates"
+
+# ── Test 8: sub-interval stage emits no heartbeat ────────────────────────────
+#
+# A stage shorter than one interval must not print a heartbeat. The
+# helper re-checks the command is still alive after each sleep before
+# printing, so a command that finishes within the interval produces no
+# beat at all.
+
+step "Test 8: sub-interval stage emits no heartbeat"
+
+OUT_FILE="$(mktemp)"
+RC=0
+(
+    # shellcheck disable=SC2034
+    DEBUG=0
+    # shellcheck disable=SC2034
+    HEARTBEAT_INTERVAL=5
+    # shellcheck source=../scripts/lib/run-step.sh
+    source "$LIB_FILE"
+    run_step "quick stage" true
+) > "$OUT_FILE" 2>&1 || RC=$?
+
+if [ "$RC" -ne 0 ]; then
+    cat "$OUT_FILE"
+    rm -f "$OUT_FILE"
+    fail "Quick stage should exit zero, got $RC"
+fi
+if grep -q "still working" "$OUT_FILE"; then
+    cat "$OUT_FILE"
+    rm -f "$OUT_FILE"
+    fail "A stage shorter than the interval should emit no heartbeat"
+fi
+rm -f "$OUT_FILE"
+pass "Sub-interval stage stays silent"
+
+# ── Test 9: no ticker output after the helper returns (orphan check) ─────────
+#
+# The most dangerous failure mode the heartbeat could introduce: a
+# background ticker that outlives the foreground command and keeps
+# printing after the stage's ok/fail line, corrupting subsequent output.
+# The helper kills and reaps the ticker before returning. This test runs
+# a long stage, prints a marker the instant the helper returns, then
+# idles longer than the interval; any heartbeat appearing after the
+# marker means an orphan survived.
+
+step "Test 9: no ticker output arrives after the helper returns"
+
+OUT_FILE="$(mktemp)"
+RC=0
+(
+    # shellcheck disable=SC2034
+    DEBUG=0
+    # shellcheck disable=SC2034
+    HEARTBEAT_INTERVAL=1
+    # shellcheck source=../scripts/lib/run-step.sh
+    source "$LIB_FILE"
+    CAP="$(mktemp)"
+    _run_capture_with_heartbeat "$CAP" "orphan stage" bash -c 'sleep 2.5; echo done'
+    rm -f "$CAP"
+    echo "AFTER_RETURN_MARKER"
+    sleep 2.5
+) > "$OUT_FILE" 2>&1 || RC=$?
+
+if [ "$RC" -ne 0 ]; then
+    cat "$OUT_FILE"
+    rm -f "$OUT_FILE"
+    fail "Orphan-check stage should exit zero, got $RC"
+fi
+if awk '/AFTER_RETURN_MARKER/{after=1} after && /still working/{found=1} END{exit !found}' "$OUT_FILE"; then
+    cat "$OUT_FILE"
+    rm -f "$OUT_FILE"
+    fail "Orphaned ticker printed a heartbeat after the helper returned"
+fi
+rm -f "$OUT_FILE"
+pass "No ticker output after return; ticker is killed and reaped cleanly"
 
 # ── Done ─────────────────────────────────────────────────────────────────────
 
