@@ -2,32 +2,32 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
   "version": 1,
-  "serialNumber": "urn:uuid:da8729fb-a9ab-4633-a69c-c3f181b53451",
+  "serialNumber": "urn:uuid:0a9b2490-b737-47db-bf37-0c37edcb699c",
   "metadata": {
-    "timestamp": "2026-06-17T17:53:08+00:00",
+    "timestamp": "2026-06-18T12:48:13+00:00",
     "tools": {
       "components": [
         {
           "type": "application",
           "name": "troskel-build-records-generator",
-          "version": "0.9.1",
+          "version": "1.0.0",
           "vendor": "troskel-project",
           "description": "Generates SBOM.json and build-manifest.json from versions.env and build-station state. See scripts/generate-build-records.sh."
         }
       ]
     },
-    "component": {
+        "component": {
       "type": "application",
       "name": "troskel",
-      "version": "0.9.1",
+      "version": "1.0.0",
       "description": "Air-gapped file-crossing scanner",
       "supplier": {"name": "Diskret Team"},
       "licenses": [{"license": {"id": "MIT"}}],
-      "purl": "pkg:generic/troskel@0.9.1",
+      "purl": "pkg:generic/troskel@1.0.0",
       "properties": [
         {"name": "project-type", "value": "security-tool"},
         {"name": "deployment-model", "value": "air-gapped"},
-        {"name": "troskel-commit", "value": "81dc4bf3b09c38217b5fae01c64ecd07ea43bdd0"},
+        {"name": "troskel-commit", "value": "9fc2f619720c9b02565a16ef21f52b29bdb2b535"},
         {"name": "troskel-dirty", "value": "true"}
       ]
     },
@@ -247,7 +247,7 @@
   ],
   "dependencies": [
     {
-      "ref": "pkg:generic/troskel@0.9.1",
+      "ref": "pkg:generic/troskel@1.0.0",
       "dependsOn": [
         "pkg:generic/fedora-coreos@stable",
         "pkg:github/firecracker-microvm/firecracker@v1.7.0",
@@ -283,7 +283,7 @@
   "compositions": [
     {
       "aggregate": "complete",
-      "assemblies": ["pkg:generic/troskel@0.9.1"],
+      "assemblies": ["pkg:generic/troskel@1.0.0"],
       "note": "Generated from versions.env and build-station state by scripts/generate-build-records.sh."
     }
   ],

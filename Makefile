@@ -36,6 +36,11 @@ BUTANE_VERSION       := $(shell . $(VERSIONS) && echo $$BUTANE_VERSION)
 LOKI_VERSION         := $(shell . $(VERSIONS) && echo $$LOKI_VERSION)
 COREOS_INSTALLER_TAG := $(shell . $(VERSIONS) && echo $$COREOS_INSTALLER_TAG)
 
+TROSKEL_VERSION := $(shell . $(VERSIONS) && echo $$TROSKEL_VERSION)
+ifeq ($(strip $(TROSKEL_VERSION)),)
+  $(error TROSKEL_VERSION empty — config/versions.env missing or unreadable)
+endif
+
 # Docker is required.
 RUNTIME := $(shell command -v docker 2>/dev/null)
 ifeq ($(RUNTIME),)

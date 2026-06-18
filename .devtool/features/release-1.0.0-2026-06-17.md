@@ -1,12 +1,12 @@
 ---
 id: "release-1.0.0-2026-06-17"
-status: "todo"
+status: "in-progress"
 priority: "high"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-17T19:30:00.000Z"
-modified: "2026-06-17T19:30:00.000Z"
+modified: "2026-06-18T12:15:28.395Z"
 completedAt: null
 labels: ["release", "docs"]
 order: "a0"
