@@ -12,8 +12,6 @@ Troskel uses multiple engines, currently [ClamAV](https://www.clamav.net/) and [
  
 ## Project status
 
-**Version: 0.9.1. Pre-1.0.0, demonstrator / evaluation-grade.**
-
 Suitable for:
 
 - Technical evaluation of the architecture.
