@@ -10,6 +10,12 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SIGDIR="/var/lib/troskel"
 SCANNER_ENV="${SCRIPT_DIR}/../config/scanner.env"
 
+# Sidecar verification protocol. Single implementation; see the module header
+# for the result contract. This script is a consumer (verifies the rootfs copy
+# on the USB against the sidecar written alongside it).
+# shellcheck source=lib/verify-artefact.sh
+source "${SCRIPT_DIR}/lib/verify-artefact.sh"
+
 [ "$(id -u)" -eq 0 ] || { echo "[!] Must be run as root."; exit 1; }
 
 # Safety check — refuse to format the system disk.
@@ -166,11 +172,17 @@ date -u --iso-8601=seconds > "${MOUNT}/usb-written-date"
 sync
 
 echo "[*] Verifying checksums..."
-cd "$MOUNT"
-sha256sum --check scanner-rootfs.ext4.sha256 \
-    && echo "[+] Checksum OK." \
-    || { echo "[!] Checksum FAILED — do not use this USB."; cd /; umount "$MOUNT"; exit 1; }
-cd /
+# Verify the rootfs copy on the USB via the shared module. It resolves the
+# artefact under $MOUNT and rejects any sidecar carrying a path, so a corrupt
+# sidecar cannot redirect the check at the source (bug 2). On any non-verified
+# result we unmount and abort: a USB that does not verify must not ship.
+if verify_artefact_check "$MOUNT" "$MOUNT/scanner-rootfs.ext4.sha256" >/dev/null; then
+    echo "[+] Checksum OK."
+else
+    echo "[!] Checksum FAILED — do not use this USB."
+    umount "$MOUNT"
+    exit 1
+fi
 
 # Verify the manifest landed intact by re-reading it FROM THE USB (not from
 # source). Two checks, because byte-identity and usability are different

@@ -33,6 +33,12 @@ source "${SCRIPT_DIR}/lib/run-step.sh"
 # plan is built from the flags below, after argument parsing.
 source "${SCRIPT_DIR}/lib/stage-plan.sh"
 
+# Sidecar verification protocol. Single implementation shared with
+# prepare-data-usb.sh and build-scanner-image.sh; see the module header for
+# the result contract. Phase 5 uses it as a consumer.
+# shellcheck source=lib/verify-artefact.sh
+source "${SCRIPT_DIR}/lib/verify-artefact.sh"
+
 # ── Argument parsing ──────────────────────────────────────────────────────────
 USB_MODE="all"        # all | data | boot
 UPDATE_ONLY=0
@@ -134,12 +140,15 @@ verify_data_usb_checksums() {
         return 1
     fi
     local RC=0
-    if ! ( cd "$VMOUNT" && sha256sum --check scanner-rootfs.ext4.sha256 ); then
+    # Verify via the shared module: resolves the artefact under $VMOUNT and
+    # rejects a path-carrying sidecar, so the check cannot be redirected to the
+    # source (bug 2). Result token suppressed; we set RC and let the caller's
+    # diagnostic stand. Module stderr (mismatch hashes etc.) still surfaces.
+    if ! verify_artefact_check "$VMOUNT" "$VMOUNT/scanner-rootfs.ext4.sha256" >/dev/null; then
         echo "[!] Checksum verification failed — do not use this USB." >&2
         RC=1
     fi
-    cd / 2>/dev/null || true
-    umount "$VMOUNT" 2>/dev/null || true
+    umount "$VMOUNT" 2>/dev/null || true   # ro mount; unmount failure is non-fatal, the tmpdir is removed next regardless
     rm -rf "$VMOUNT"
     return "$RC"
 }
