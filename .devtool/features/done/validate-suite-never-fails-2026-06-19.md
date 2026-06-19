@@ -1,15 +1,15 @@
 ---
 id: "validate-suite-never-fails-2026-06-19"
-status: "in-progress"
+status: "done"
 priority: "high"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-19T00:00:00.000Z"
-modified: "2026-06-19T00:00:00.000Z"
-completedAt: null
+modified: "2026-06-19T22:24:43.210Z"
+completedAt: "2026-06-19T22:24:43.210Z"
 labels: ["bug", "quality", "tests", "infra"]
-order: "a0"
+order: "Zw"
 ---
 # Tier 1 validate suite tallies failures but never fails
 
