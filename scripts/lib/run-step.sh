@@ -13,8 +13,10 @@
 #   - Output helpers: header(), progress(), ok(), warn(), fail().
 #
 #   - confirm_destructive(): prompt the operator to confirm an
-#     irreversible step. Drains buffered stdin first and refuses to
-#     treat a bare Enter as assent. See its contract comment below.
+#     irreversible step. Refuses to treat a bare Enter as assent (an
+#     empty reply re-asks rather than confirming). No stdin drain is
+#     used; see its contract comment below for why the safety property
+#     does not need one.
 #
 #   - run_step(): the project's reference pattern for invoking a
 #     sub-script as a named stage with full failure-mode discipline.
@@ -33,6 +35,19 @@
 #   - The POSTCOND environment variable may be set to a function name
 #     for a single run_step call; run_step consumes (unsets) it after
 #     reading so it does not leak into the next call.
+#   - The KEEP_OUT environment variable may be set to a file path for a
+#     single run_step call; on success run_step copies the captured
+#     sub-script output there before deleting its scratch file, so the
+#     caller can post-process it (e.g. extract a value). Like POSTCOND
+#     it is one-shot: run_step unsets it after reading. On failure the
+#     output is dumped to the terminal as usual and KEEP_OUT is NOT
+#     written, because a failed stage exits the shell before the caller
+#     could read it. In debug mode the output streamed live and was
+#     never captured, so KEEP_OUT cannot be honoured; run_step writes an
+#     empty file there and the caller's own post-extraction check (which
+#     must exist, per the KEEP_OUT contract) reports the miss. See the
+#     boot-USB stage in scripts/troskel-build.sh for the reference
+#     consumer.
 #   - run_step exits the calling shell on failure. Callers expecting
 #     to recover from a stage failure must invoke run_step in a
 #     subshell or restructure to detect failure differently.
@@ -200,10 +215,26 @@ _run_capture_with_heartbeat() {
 # Usage:
 #   run_step "Label" command args...
 #   POSTCOND=fn_name run_step "Label" command args...
+#   KEEP_OUT=/path/to/file run_step "Label" command args...
+#
+# CONTRACT (KEEP_OUT consumers): run_step guarantees the kept file
+# contains exactly the sub-script's stdout+stderr and no heartbeat
+# lines (the heartbeat goes only to the terminal; see
+# _run_capture_with_heartbeat). It does NOT guarantee the file is
+# non-empty or contains what you expect to parse: a sub-script can
+# succeed while emitting nothing, and debug mode yields an empty kept
+# file by construction. A consumer that parses the kept file for a
+# required value MUST check the parse result and fail loudly on a miss,
+# rather than trusting that KEEP_OUT being set means the value is there.
+# The reference consumer is the boot-USB stage in troskel-build.sh,
+# which extracts the scanner passphrase and aborts if the extraction is
+# empty.
 run_step() {
     local LABEL="$1"; shift
     local POSTCOND_FN="${POSTCOND:-}"
     unset POSTCOND   # one-shot; do not leak into the next call
+    local KEEP_OUT_FN="${KEEP_OUT:-}"
+    unset KEEP_OUT   # one-shot; do not leak into the next call
     progress "${LABEL}..."
     if [ "${DEBUG:-0}" -eq 1 ]; then
         if ! "$@"; then
@@ -217,6 +248,13 @@ run_step() {
             echo "  The sub-script exited zero but the expected result is missing."
             echo "  This indicates a silent failure inside the sub-script."
             exit 1
+        fi
+        # Debug mode streamed the output live; there is nothing captured
+        # to hand back. Truncate the kept file to empty so the consumer's
+        # mandatory post-extraction check (see the KEEP_OUT contract)
+        # registers the miss rather than reading a stale file.
+        if [ -n "$KEEP_OUT_FN" ]; then
+            : > "$KEEP_OUT_FN"
         fi
         ok "$LABEL"
     else
@@ -247,6 +285,12 @@ run_step() {
             echo "  This indicates a silent failure inside the sub-script."
             echo "  Run with --debug for full output."
             exit 1
+        fi
+        # Success: hand the captured output to the caller if requested,
+        # then dispose of the scratch file. Copy (not move) so the
+        # cleanup path below stays uniform.
+        if [ -n "$KEEP_OUT_FN" ]; then
+            cp "$OUT" "$KEEP_OUT_FN"
         fi
         ok "$LABEL"
         rm -f "$OUT"

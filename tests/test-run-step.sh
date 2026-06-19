@@ -510,6 +510,93 @@ if [ "$RC" -eq 0 ]; then
 fi
 pass "Stray pre-prompt input does not confirm the destructive step"
 
+
+# ── Test 14: KEEP_OUT hands captured output to the caller on success ─────────
+#
+# The boot-USB stage relies on KEEP_OUT to recover the captured output
+# and extract the scanner passphrase from it. The failure mode that
+# matters: KEEP_OUT is set, the stage succeeds, but the kept file is
+# empty or missing the command's output, so the passphrase extraction
+# silently yields nothing and the operator loses an unrecoverable
+# credential. This test proves the kept file contains the command's
+# stdout after a successful run.
+
+step "Test 14: KEEP_OUT captures sub-script output on success"
+
+KEPT="$(mktemp)"
+(
+    # shellcheck disable=SC2034
+    DEBUG=0
+    # shellcheck disable=SC2034
+    HEARTBEAT_INTERVAL=1
+    # shellcheck source=../scripts/lib/run-step.sh
+    source "$LIB_FILE"
+    KEEP_OUT="$KEPT" run_step "keepout happy" \
+        bash -c 'echo PASSPHRASE-MARKER-correct-horse-battery-staple'
+) >/dev/null 2>&1
+if ! grep -q 'PASSPHRASE-MARKER-correct-horse-battery-staple' "$KEPT"; then
+    fail "KEEP_OUT file did not contain the sub-script output (got: '$(cat "$KEPT")')"
+fi
+pass "KEEP_OUT file contains the sub-script output after success"
+rm -f "$KEPT"
+
+# ── Test 15: KEEP_OUT excludes heartbeat lines ───────────────────────────────
+#
+# The kept file must contain ONLY the command's output, never the
+# liveness heartbeat. If a heartbeat line leaked in, the passphrase
+# extraction awk could capture "still working..." as the passphrase.
+# Force a stage longer than the heartbeat interval and assert the kept
+# file is free of heartbeat text while still holding the real output.
+
+step "Test 15: KEEP_OUT excludes heartbeat lines on a long stage"
+
+KEPT="$(mktemp)"
+(
+    # shellcheck disable=SC2034
+    DEBUG=0
+    # shellcheck disable=SC2034
+    HEARTBEAT_INTERVAL=1
+    # shellcheck source=../scripts/lib/run-step.sh
+    source "$LIB_FILE"
+    KEEP_OUT="$KEPT" run_step "keepout long" \
+        bash -c 'sleep 3; echo REAL-OUTPUT-LINE'
+) >/dev/null 2>&1
+if grep -q 'still working' "$KEPT"; then
+    fail "KEEP_OUT file leaked a heartbeat line: $(grep 'still working' "$KEPT")"
+fi
+if ! grep -q 'REAL-OUTPUT-LINE' "$KEPT"; then
+    fail "KEEP_OUT file is missing the real output after a long stage"
+fi
+pass "KEEP_OUT file holds real output and no heartbeat lines"
+rm -f "$KEPT"
+
+# ── Test 16: debug mode leaves the KEEP_OUT file empty ───────────────────────
+#
+# In debug mode the sub-script's output streamed live and was never
+# captured, so there is nothing to hand back. run_step must truncate the
+# KEEP_OUT file to empty rather than leave a stale one, so the consumer's
+# mandatory post-extraction check registers the miss. (The boot stage
+# then fails loudly with a "record it from the streamed output" message
+# rather than printing an empty passphrase box.)
+
+step "Test 16: debug mode truncates the KEEP_OUT file to empty"
+
+KEPT="$(mktemp)"
+printf 'stale pre-existing content\n' > "$KEPT"
+(
+    # shellcheck disable=SC2034
+    DEBUG=1
+    # shellcheck source=../scripts/lib/run-step.sh
+    source "$LIB_FILE"
+    KEEP_OUT="$KEPT" run_step "keepout debug" \
+        bash -c 'echo streamed-not-captured'
+) >/dev/null 2>&1
+if [ -s "$KEPT" ]; then
+    fail "KEEP_OUT file should be empty in debug mode but held: $(cat "$KEPT")"
+fi
+pass "KEEP_OUT file is emptied in debug mode so the consumer check fires"
+rm -f "$KEPT"
+
 # ── Done ─────────────────────────────────────────────────────────────────────
 
 step "Result"
