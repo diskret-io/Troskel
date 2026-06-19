@@ -9,6 +9,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/../config/versions.env"
 # shellcheck source=../config/scanner.env
 source "${SCRIPT_DIR}/../config/scanner.env"
+# Sidecar produce/verify protocol. Single implementation; see the module
+# header for the format and result contract. This script is the producer.
+# shellcheck source=lib/verify-artefact.sh
+source "${SCRIPT_DIR}/lib/verify-artefact.sh"
 
 [ -n "${DEBIAN_RELEASE:-}" ] \
     || { echo "[!] DEBIAN_RELEASE not set — check config/versions.env"; exit 1; }
@@ -120,14 +124,12 @@ truncate -s "$SIZE" "$OUTPUT"
 mkfs.ext4 -F -d "$WORK" "$OUTPUT"
 e2fsck -fn "$OUTPUT" && echo "[+] Image verified OK."
 
-# Emit the sidecar with a relative path (basename only) so downstream
-# verifications (prepare-data-usb.sh, troskel-build.sh phase 5) resolve
-# the hash against the file in the verifier's current working directory.
-# Using an absolute path here bakes /var/lib/troskel/ into the sidecar
-# and causes downstream `cd "$MOUNT" && sha256sum --check` to follow the
-# absolute path back to the source on the host, verifying the source
-# rather than the copy on the USB. That collapses the verification
-# step to a no-op against a USB that may not have been written.
-( cd "$(dirname "$OUTPUT")" && sha256sum "$(basename "$OUTPUT")" > "$(basename "$OUTPUT").sha256" )
+# Emit the sidecar via the shared verification module. The module writes a
+# basename-only sidecar by construction (and self-checks that it did), so the
+# "absolute path baked into the sidecar" failure (bug 2) cannot recur here:
+# downstream verifiers resolve the artefact under their own mount point and
+# reject any sidecar carrying a path. See scripts/lib/verify-artefact.sh.
+verify_artefact_emit "$OUTPUT" \
+    || { echo "[!] Failed to emit sidecar for $OUTPUT"; exit 1; }
 echo "[+] Image written to: $OUTPUT"
 echo "[+] SHA-256: $(cat "${OUTPUT}.sha256")"

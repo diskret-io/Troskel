@@ -326,9 +326,11 @@ fi
 
 echo ""
 echo "=== Tier 1 summary: ${PASS} passed, ${FAIL} failed ==="
+echo ""
 if [ "$FAIL" -ne 0 ]; then
     echo "[!] Tier 1 validation failed. See the [FAIL] lines above."
     exit 1
 fi
 echo "[+] Tier 1 validation passed."
+echo ""
 exit 0

@@ -113,6 +113,7 @@ update: image
 ## Tier 1: Butane validation + shellcheck. No privileges needed.
 validate: image
 	$(RUN_BASE) bash tests/test-validate.sh
+	$(RUN_BASE) bash tests/test-verify-artefact.sh
 
 ## Tier 2: Full build pipeline (debootstrap, image build). Needs --privileged.
 test-build: image check-priv
