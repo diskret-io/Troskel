@@ -8,7 +8,6 @@
 #   sudo bash scripts/troskel-build.sh [OPTIONS]
 #
 # Options:
-#   --container     Insist on a container runtime; fail if none found.
 #   --usb-all       Write both boot USB and data USB (default).
 #   --usb-data      Write data USB only; expects one USB device.
 #   --usb-boot      Write boot USB only; expects one USB device.
@@ -367,104 +366,79 @@ if [ "$USB_MODE" = "all" ] || [ "$USB_MODE" = "data" ]; then
         bash "${SCRIPT_DIR}/prepare-data-usb.sh" "$DATA_DEV"
 fi
 
-# Boot USB write uses a hand-rolled wrapper rather than run_step because
-# we need to extract the passphrase block from the captured output before
-# disposing of it. The wrapper otherwise follows the same shape as
-# run_step and shares the same failure-mode discipline: explicit exit
-# code propagation, post-condition check, captured output dumped on
-# failure. The capture is routed through _run_capture_with_heartbeat
-# (the same helper run_step uses) so this multi-minute write does not
-# look hung. Per that helper's contract, the heartbeat goes to the
-# terminal only and never into $OUT, so the passphrase-extraction awk
-# below reads clean command output.
+# Boot USB write goes through run_step like every other captured stage.
+# The one extra need here is reading the captured output afterwards to
+# extract the scanner passphrase, which run_step supports via KEEP_OUT:
+# on success it copies the captured output to the named file, and (per
+# the KEEP_OUT contract in run-step.sh) the consumer must check its own
+# extraction result rather than trusting the file is populated. POSTCOND
+# carries the same iso9660-signature side-effect check the hand-rolled
+# wrapper used; run_step dumps captured output and exits non-zero on
+# either a non-zero write or a failed post-condition, so the failure-mode
+# discipline is identical and no longer duplicated here.
+#
+# In debug mode run_step streamed the boot script's output live and
+# leaves BOOT_OUT empty by construction; the passphrase-extraction check
+# below then fails loudly, which is correct: an operator running --debug
+# sees the passphrase in the streamed output directly, and a silent
+# empty summary box must never be the result.
 if [ "$USB_MODE" = "all" ] || [ "$USB_MODE" = "boot" ]; then
     BOOT_DEV="${ROLE_ASSIGNMENT[TROSKEL-BOOT]}"
-    progress "Writing TROSKEL-BOOT (${BOOT_DEV}) (typically 10-15 min)..."
-    if [ "$DEBUG" -eq 1 ]; then
-        if ! bash "${SCRIPT_DIR}/prepare-boot-usb.sh" "$BOOT_DEV"; then
-            fail "TROSKEL-BOOT write failed"
-            exit 1
-        fi
-        if ! postcond_boot_usb_written; then
-            fail "TROSKEL-BOOT — post-condition failed"
-            exit 1
-        fi
-        ok "TROSKEL-BOOT written (${BOOT_DEV})"
-    else
-        OUT="$(mktemp)"
-        if ! _run_capture_with_heartbeat "$OUT" "Writing TROSKEL-BOOT" \
-                bash "${SCRIPT_DIR}/prepare-boot-usb.sh" "$BOOT_DEV"; then
-            fail "TROSKEL-BOOT write failed"
-            echo ""
-            echo -e "${C_DIM}--- output ---${C_RESET}"
-            cat "$OUT"
-            echo -e "${C_DIM}--------------${C_RESET}"
-            rm -f "$OUT"
-            exit 1
-        fi
-        if ! postcond_boot_usb_written; then
-            fail "TROSKEL-BOOT — post-condition failed"
-            echo ""
-            echo -e "${C_DIM}--- output ---${C_RESET}"
-            cat "$OUT"
-            echo -e "${C_DIM}--------------${C_RESET}"
-            rm -f "$OUT"
-            echo ""
-            echo "  The sub-script exited zero but the boot USB does not carry"
-            echo "  the expected iso9660 signature. The dd write did not take effect."
-            exit 1
-        fi
-        ok "TROSKEL-BOOT written (${BOOT_DEV})"
-        # Extract the passphrase from prepare-boot-usb.sh output. The
-        # boot script's output contains a banner block:
-        #
-        #     ============================================================
-        #       SCANNER PASSPHRASE — RECORD THIS NOW
-        #     ============================================================
-        #
-        #         <four-word-passphrase>
-        #
-        #       <explanatory text...>
-        #     ============================================================
-        #
-        # We want the passphrase line (and only that line). The awk
-        # state machine: enter header mode on the title line, switch to
-        # passphrase mode on the banner that closes the header, exit on
-        # the banner that closes the passphrase block. Non-empty lines
-        # in passphrase mode (skipping the explanatory paragraph) are
-        # captured. The explanatory text starts with two-space-indented
-        # words; the passphrase line starts with four-space-indented
-        # text and contains no spaces inside the value. We capture only
-        # the first non-empty line in passphrase mode, which is the
-        # passphrase itself.
-        awk '
-            /SCANNER PASSPHRASE/        { in_header=1; next }
-            in_header && /^====/        { in_header=0; in_pass=1; next }
-            in_pass && /^====/          { exit }
-            in_pass && NF && !captured  { print $0; captured=1 }
-        ' "$OUT" > "$PASSPHRASE_FILE"
+    BOOT_OUT="$(mktemp)"
+    POSTCOND=postcond_boot_usb_written KEEP_OUT="$BOOT_OUT" run_step \
+        "Writing TROSKEL-BOOT (${BOOT_DEV}) (typically 10-15 min)" \
+        bash "${SCRIPT_DIR}/prepare-boot-usb.sh" "$BOOT_DEV"
 
-        # Verify the capture worked. An empty PASSPHRASE_FILE means the
-        # boot script's output format has changed and the awk pattern
-        # missed it, which would silently produce a summary box with no
-        # passphrase inside; the operator would lose the passphrase
-        # without realising. Fail loudly instead.
-        if [ ! -s "$PASSPHRASE_FILE" ]; then
-            fail "Passphrase capture failed — could not extract from boot script output"
+    # Extract the passphrase from the captured boot-script output. The
+    # boot script prints a banner block:
+    #
+    #     ============================================================
+    #       SCANNER PASSPHRASE — RECORD THIS NOW
+    #     ============================================================
+    #
+    #         <four-word-passphrase>
+    #
+    #       <explanatory text...>
+    #     ============================================================
+    #
+    # The awk state machine: enter header mode on the title line, switch
+    # to passphrase mode on the banner closing the header, exit on the
+    # banner closing the passphrase block, capture the first non-empty
+    # line in passphrase mode (the passphrase itself, ahead of the
+    # explanatory paragraph).
+    #
+    # CONTRACT NOTE (KEEP_OUT consumer): BOOT_OUT may be empty (debug
+    # mode, or a boot-script output-format change). The emptiness check
+    # below is mandatory, not optional: without it a missed extraction
+    # would produce a summary box with no passphrase and the operator
+    # would lose an unrecoverable per-build credential.
+    awk '
+        /SCANNER PASSPHRASE/        { in_header=1; next }
+        in_header && /^====/        { in_header=0; in_pass=1; next }
+        in_pass && /^====/          { exit }
+        in_pass && NF && !captured  { print $0; captured=1 }
+    ' "$BOOT_OUT" > "$PASSPHRASE_FILE"
+
+    if [ ! -s "$PASSPHRASE_FILE" ]; then
+        fail "Passphrase capture failed — could not extract from boot script output"
+        if [ "$DEBUG" -eq 1 ]; then
+            echo "  Running in --debug: the passphrase was printed in the streamed"
+            echo "  output above. Record it from there."
+        else
             echo ""
             echo -e "${C_DIM}--- output ---${C_RESET}"
-            cat "$OUT"
+            cat "$BOOT_OUT"
             echo -e "${C_DIM}--------------${C_RESET}"
-            rm -f "$OUT"
             echo ""
             echo "  The boot USB was written, but the scanner passphrase could"
             echo "  not be extracted from prepare-boot-usb.sh's output. Without"
             echo "  the passphrase the boot USB is unusable. Boot script output"
             echo "  format may have changed since this orchestrator was written."
-            exit 1
         fi
-        rm -f "$OUT"
+        rm -f "$BOOT_OUT"
+        exit 1
     fi
+    rm -f "$BOOT_OUT"
 fi
 
 # ── Phase 5: Verification ─────────────────────────────────────────────────────

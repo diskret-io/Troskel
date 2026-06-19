@@ -1,15 +1,15 @@
 ---
 id: "orchestrator-progress-prompts-2026-06-18"
-status: "in-progress"
+status: "done"
 priority: "medium"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-18T00:00:00.000Z"
-modified: "2026-06-18T17:11:13.894Z"
-completedAt: null
+modified: "2026-06-19T16:36:58.319Z"
+completedAt: "2026-06-19T16:36:58.319Z"
 labels: ["refactor", "infra"]
-order: "a0"
+order: "Zx"
 ---
 # Orchestrator prompt framing and stage progress
 

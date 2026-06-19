@@ -9,6 +9,9 @@
 #   2. shellcheck passes on all shell scripts in the project
 #   3. guest/run-scan.sh uses only POSIX sh constructs (no bashisms)
 #   4. run_step unit tests (scripts/lib/run-step.sh failure-mode discipline)
+#   5. SBOM.json product version matches versions.env
+#   6. Deprecated make aliases fail with a rename pointer; no phony
+#      target is declared without a recipe.
 #
 # This tier runs on any Linux host with butane and shellcheck installed,
 # including inside the troskel-build container without --privileged.
@@ -182,4 +185,118 @@ expected troskel@${EXPECTED_VERSION} — regenerate SBOM on the build station" \
     else
         result "ok" "SBOM version agreement (version field and ${PRESENT_PURL} purl refs all ${EXPECTED_VERSION})"
     fi
+fi
+
+
+# --- 6. Deprecated make aliases fail loudly (static check) --------------------
+# build, scan, and all were renamed. They are retained in the Makefile
+# only to emit a rename pointer and exit non-zero. This check validates
+# that by parsing the Makefile statically rather than invoking make:
+# `make` is not installed in the troskel-build container this script runs
+# in, and the check is about a repo artefact (the Makefile text), not
+# runtime behaviour, so a hermetic parse is both sufficient and more
+# robust than shelling out.
+#
+# For each alias we extract its recipe block (the target line plus the
+# tab-indented recipe lines beneath it, skipping blank/comment lines) and
+# assert the block:
+#   (a) exists at all — guards the alias being dropped from the Makefile,
+#       which would give a bare "No rule to make target" at the operator's
+#       terminal, reading as a broken checkout;
+#   (b) contains the literal replacement command (e.g. "make test-build")
+#       — guards the pointer text going missing or wrong;
+#   (c) contains a non-zero `exit` in the recipe — guards the alias being
+#       given a succeeding recipe, which would let a stale caller of the
+#       old name succeed and mask the rename.
+# (a)+(c) together are what the runtime invocation used to prove (alias
+# exits non-zero); (b) is the pointer text. A purely textual check cannot
+# observe make's exit code, so (c) asserts the recipe shape that produces
+# it; if the recipe form that guarantees non-zero exit ever changes,
+# update this assertion alongside it.
+#
+# NOTE: this section exits non-zero itself on failure rather than only
+# incrementing FAIL, because test-validate.sh does not (yet) read the
+# FAIL tally at the end (tracked by validate-suite-never-fails). Until
+# that lands, a check that only bumped FAIL would not fail the suite.
+echo "[*] Checking deprecated make aliases (static)..."
+ALIAS_FAIL=0
+
+# Extract the recipe block for a target from the Makefile: the lines from
+# the "target:" line up to (not including) the next line that is neither
+# blank, nor a comment, nor tab-indented. Recipe lines in make are
+# tab-indented; we keep those.
+alias_recipe_block() {
+    local target="$1"
+    awk -v t="$target" '
+        $0 ~ "^" t ":" { grab=1; next }
+        grab {
+            # A tab-indented line is part of the recipe.
+            if ($0 ~ /^\t/) { print; next }
+            # Blank lines and comment lines may sit inside/after; tolerate
+            # blanks but stop at the first non-recipe content line.
+            if ($0 ~ /^[[:space:]]*$/) { next }
+            if ($0 ~ /^#/)            { next }
+            grab=0
+        }
+    ' Makefile
+}
+
+check_alias_static() {
+    local target="$1" expect="$2" block
+    block="$(alias_recipe_block "$target")"
+    if [ -z "$block" ]; then
+        printf "    FAIL %s: no recipe found in Makefile (alias dropped?)\n" "$target"
+        ALIAS_FAIL=1
+        return
+    fi
+    if ! printf '%s' "$block" | grep -qF "$expect"; then
+        printf "    FAIL %s: recipe does not name replacement '%s'\n" "$target" "$expect"
+        ALIAS_FAIL=1
+        return
+    fi
+    # A non-zero exit: `exit N` with N != 0. Match `exit` followed by a
+    # non-zero digit. `exit 0` (or a bare `exit`, which is exit-of-last-
+    # status) does not count as a deliberate failure.
+    if ! printf '%s' "$block" | grep -qE 'exit[[:space:]]+[1-9][0-9]*'; then
+        printf "    FAIL %s: recipe does not exit non-zero (would succeed and mask the rename)\n" "$target"
+        ALIAS_FAIL=1
+        return
+    fi
+    printf "    ok  %s -> names %s and exits non-zero\n" "$target" "$expect"
+}
+check_alias_static build "make test-build"
+check_alias_static scan  "make test-scan"
+check_alias_static all   "make test"
+
+# Belt-and-braces: no .PHONY name may lack a recipe. A phony name with no
+# recipe gives "No rule to make target" at runtime, the same broken-
+# checkout symptom as a dropped alias. Parse the .PHONY declaration
+# (which may span several lines via trailing backslash continuations,
+# as it does here), then confirm each listed target has a "target:" rule
+# line in the Makefile. The continuation handling matters: the deprecated
+# aliases live on the continuation line, so a parser that read only the
+# first .PHONY line would silently skip the very targets this guards.
+PHONY_NAMES="$(awk '
+    /^\.PHONY:/      { collecting=1; sub(/^\.PHONY:/, "") }
+    collecting {
+        cont = (/\\[[:space:]]*$/)   # does this line continue?
+        gsub(/\\/, "")
+        print
+        if (!cont) collecting=0
+    }
+' Makefile | tr -s ' ' '\n' | sed '/^$/d' | sort -u)"
+for t in $PHONY_NAMES; do
+    if ! grep -qE "^${t}:" Makefile; then
+        printf "    FAIL .PHONY lists '%s' but no '%s:' rule defines it\n" "$t" "$t"
+        ALIAS_FAIL=1
+    fi
+done
+
+if [ "$ALIAS_FAIL" -eq 0 ]; then
+    result "ok" "deprecated make aliases name replacement and exit non-zero; no recipe-less phony targets"
+else
+    result "one or more make-alias checks failed — see above" \
+        "deprecated make aliases name replacement and exit non-zero; no recipe-less phony targets"
+    # Load-bearing: fail the suite now (see NOTE above).
+    exit 1
 fi
