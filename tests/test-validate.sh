@@ -23,6 +23,13 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 cd "$PROJECT_ROOT"
 
+# Pass/fail tally. Both counters are read by the summary block at the end
+# of the script, which exits non-zero if FAIL is greater than zero. The
+# result() helper records a check's outcome and continues rather than
+# exiting, so a single run reports every failing check at once instead of
+# stopping at the first; the final summary is what makes the suite
+# load-bearing. Do not convert checks to exit-on-first-failure: that would
+# lose the report-everything property this design exists to provide.
 PASS=0
 FAIL=0
 
@@ -213,11 +220,6 @@ fi
 # observe make's exit code, so (c) asserts the recipe shape that produces
 # it; if the recipe form that guarantees non-zero exit ever changes,
 # update this assertion alongside it.
-#
-# NOTE: this section exits non-zero itself on failure rather than only
-# incrementing FAIL, because test-validate.sh does not (yet) read the
-# FAIL tally at the end (tracked by validate-suite-never-fails). Until
-# that lands, a check that only bumped FAIL would not fail the suite.
 echo "[*] Checking deprecated make aliases (static)..."
 ALIAS_FAIL=0
 
@@ -297,6 +299,36 @@ if [ "$ALIAS_FAIL" -eq 0 ]; then
 else
     result "one or more make-alias checks failed — see above" \
         "deprecated make aliases name replacement and exit non-zero; no recipe-less phony targets"
-    # Load-bearing: fail the suite now (see NOTE above).
+fi
+
+# ── Summary and exit gate ─────────────────────────────────────────────────────
+# The script reaches here having run every check and recorded each via
+# result(). This is the load-bearing step: the suite exits non-zero if any
+# check failed, which is what makes `make validate` an actual CI gate
+# rather than a log that scrolls past green regardless. Before this block
+# existed, FAIL was incremented but never read and the script exited zero
+# no matter what, so every Tier 1 check was decorative (see the
+# validate-suite-never-fails card for the history).
+#
+# Self-test hook. The gate above is itself a success indicator, and a
+# success indicator must be able to fail (QUALITY.md principle 2). Setting
+# VALIDATE_SELFTEST_FORCE_FAIL=1 injects one synthetic failed check here,
+# so an operator (or a CI meta-check) can confirm the suite exits non-zero
+# when something is wrong without having to break a real input. With the
+# variable unset this is inert. The hook exists so the gate cannot
+# silently regress to always-zero again: a one-line invocation
+# (`VALIDATE_SELFTEST_FORCE_FAIL=1 bash tests/test-validate.sh; echo $?`)
+# proves the gate bites and must print a non-zero status.
+if [ "${VALIDATE_SELFTEST_FORCE_FAIL:-0}" -eq 1 ]; then
+    result "self-test: forced failure injected (VALIDATE_SELFTEST_FORCE_FAIL=1)" \
+        "self-test gate liveness"
+fi
+
+echo ""
+echo "=== Tier 1 summary: ${PASS} passed, ${FAIL} failed ==="
+if [ "$FAIL" -ne 0 ]; then
+    echo "[!] Tier 1 validation failed. See the [FAIL] lines above."
     exit 1
 fi
+echo "[+] Tier 1 validation passed."
+exit 0
