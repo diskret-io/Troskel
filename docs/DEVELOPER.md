@@ -2,7 +2,7 @@
 
 How the build pipeline works, how to run the tests, and how to iterate on individual scripts.
 
-For project-contribution conventions (git workflow, commit message format), see [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
+For project-contribution conventions (git workflow, commit message format), see [`../CONTRIBUTING.md`](../CONTRIBUTING.md).   
 
 ## Prerequisites
 
@@ -158,9 +158,17 @@ make clean       # Remove the image and the artefact volume.
 
 `make clean` is for starting over: removes both the container image and the named volume holding build artefacts. Useful for diagnosing volume-corruption issues; rarely needed otherwise.
 
-## Deprecated aliases
+## Renamed targets
 
-`make build`, `make scan`, and `make all` continue to work as aliases for `make test-build`, `make test-scan`, and `make test`, with a deprecation warning printed before they run. They will be removed in a future release.
+`make build`, `make scan`, and `make all` no longer run. They were renamed (`build` and `scan` folded into the tiered `test-build` / `test-scan` / `update` targets; `all` dropped in favour of `test`). Each now prints a one-line pointer to its replacement and exits non-zero, so a stale script or muscle-memory invocation fails loudly rather than silently doing nothing or, worse, appearing to succeed.
+
+| Old command  | Use instead                                            |
+|--------------|--------------------------------------------------------|
+| `make build` | `make test-build` (Tier 2 build) or `make update`      |
+| `make scan`  | `make test-scan` (Tier 3 scan)                         |
+| `make all`   | `make test` (validate + build + scan)                  |
+
+The placeholder targets will be removed entirely in a future release, once no caller references the old names. `tests/test-validate.sh` statically checks the Makefile: each placeholder recipe must name its replacement and contain a non-zero `exit`, and no `.PHONY` name may lack a recipe. So this table and the Makefile cannot silently drift apart.
 
 ## Project layout
 
