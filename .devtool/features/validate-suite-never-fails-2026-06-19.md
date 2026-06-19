@@ -6,7 +6,7 @@ assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-19T00:00:00.000Z"
-modified: "2026-06-19T18:13:03.986Z"
+modified: "2026-06-19T00:00:00.000Z"
 completedAt: null
 labels: ["bug", "quality", "tests", "infra"]
 order: "a0"
@@ -134,10 +134,16 @@ reverted, which this harness fix is a precondition for.
 
 ## Open questions
 
-1. Does `make test` (which chains validate, test-build, test-scan)
-   propagate a non-zero from `validate`, or does it have the same
-   tally-not-read shape in its own wrappers? Check `test-build.sh` and
-   `test-scan.sh` for the same pattern while here; if they share it,
-   widen this card or split a sibling. The orchestrator-failure-
-   propagation work fixed this class in `troskel-build.sh`; the test
-   harness may have the same latent issue independently.
+1. (Resolved) Does `make test` (which chains validate, test-build,
+   test-scan) propagate a non-zero from `validate`, and do the other two
+   harnesses share the tally-not-read shape? Checked. They do not. Both
+   `test-build.sh` and `test-scan.sh` are fail-fast: `set -euo pipefail`
+   plus an explicit `exit 1` at every check site, so any failed check
+   exits non-zero immediately and the "pipeline OK" line is reached only
+   when all checks passed. `test-build.sh` accumulates `PREFLIGHT_FAIL`
+   but, unlike the old `test-validate.sh`, explicitly acts on it with an
+   `exit 1`. The defect was unique to `test-validate.sh`, whose
+   `result()` design deliberately continues past failures to report them
+   all in one run and therefore needed (and lacked) a final exit keyed on
+   the tally. Scope stays narrow: this card fixes `test-validate.sh`
+   only; no sibling card needed.
