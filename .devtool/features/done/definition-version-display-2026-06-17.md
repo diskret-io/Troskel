@@ -1,15 +1,15 @@
 ---
 id: "definition-version-display-2026-06-17"
-status: "todo"
+status: "done"
 priority: "medium"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-17T18:50:48.765Z"
-modified: "2026-06-20T19:19:38.914Z"
-completedAt: null
+modified: "2026-06-20T23:15:09.620Z"
+completedAt: "2026-06-20T23:15:09.620Z"
 labels: ["feature", "ops"]
-order: "a1"
+order: "Zr"
 ---
 # Definition-version pre-login display
 

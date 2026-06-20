@@ -40,6 +40,32 @@ storage:
       contents:
         local: host-scripts/check-system-ready
 
+    # Default pre-login banner, shown by agetty on tty1 before login.
+    #
+    # CONTRACT (default/fallback side): config/host-scripts/load-scanner
+    # overwrites this file at boot with the loaded signature and YARA dates
+    # (its getty ordering, Before=getty@tty1.service below, guarantees the
+    # rewrite lands before agetty prints the prompt). This committed version is
+    # the fallback the operator sees ONLY when load-scanner did not reach its
+    # banner block: no data USB, a failed rootfs verification, or the unit not
+    # firing. It MUST therefore say "not loaded", never a date: a load failure
+    # leaves this text in place, and a stale date here would misrepresent a
+    # failed load as a successful one. Keep the "not loaded" wording in step
+    # with the per-field fallback token load-scanner emits.
+    - path: /etc/issue
+      mode: 0644
+      overwrite: true
+      contents:
+        inline: |
+          Troskel scanner
+          ===============
+
+            Signature date  : not loaded
+            YARA rules date : not loaded
+
+          Scanner image not loaded. If a data USB is inserted, check the boot
+          logs; otherwise insert the TROSKEL-DATA USB and reboot.
+
 systemd:
   units:
     - name: load-scanner.service

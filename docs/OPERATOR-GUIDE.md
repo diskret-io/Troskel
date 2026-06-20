@@ -34,12 +34,14 @@ There is no other special preparation required. Copy the files to the USB as you
 
 4. **Log in** as `scanner` with the passphrase from the admin.
 
+   Before you log in, the pre-login screen already shows the loaded signature date and YARA rules date. This is the at-a-glance subset of what `show-status` reports after login, and it is read from the same loaded data USB. If either date reads `not loaded`, the data USB has not loaded correctly: do not log in to scan. Power off and contact the admin. Seeing the dates before login lets you catch a stale or missing data USB without starting a session, and the screen can be photographed for handover or audit without typing anything.
+
 5. **Check the system is ready:**
    ```
    show-status
    check-system-ready
    ```
-   Both must pass before scanning. If either reports a problem, see the troubleshooting section below.
+   Both must pass before scanning. `show-status` repeats the two pre-login dates and adds the fuller picture: KVM availability, active network interfaces, the last scan result, and build identity. If either command reports a problem, see the troubleshooting section below.
 
 6. **Insert the file USB.** Wait a moment for the OS to register it.
 

@@ -10,6 +10,7 @@
 #   3. guest/run-scan.sh uses only POSIX sh constructs (no bashisms)
 #   4. run_step unit tests (scripts/lib/run-step.sh failure-mode discipline)
 #   4b. passphrase banner round-trip (scripts/lib/passphrase-banner.sh)
+#   4c. load-scanner banner + rootfs verification (host-scripts/load-scanner)
 #   5. SBOM.json product version matches versions.env
 #   6. Deprecated make aliases fail with a rename pointer; no phony
 #      target is declared without a recipe.
@@ -152,6 +153,22 @@ if bash "${SCRIPT_DIR}/test-passphrase-banner.sh" > /tmp/pb-out.txt 2>&1; then
 else
     result "passphrase banner round-trip failed — see output below" "passphrase banner round-trip"
     cat /tmp/pb-out.txt | sed 's/^/         /'
+fi
+
+# --- 4c. load-scanner banner + rootfs-verification test ----------------------
+# Exercises config/host-scripts/load-scanner against fixture directories via its
+# DATA_USB/DEST/MOUNT/ETC_ISSUE env seams: host-side rootfs verification (a
+# failed verification is fatal and removes the bad copy) and pre-login banner
+# generation (a good load writes /etc/issue agreeing with $DEST; a fatal load
+# leaves the Butane default standing). Hermetic (no root, no device, no
+# container, sub-second), so it belongs in Tier 1. See tests/test-load-scanner.sh
+# header for the bug history it guards.
+echo "[*] Running load-scanner unit tests..."
+if bash "${SCRIPT_DIR}/test-load-scanner.sh" > /tmp/ls-out.txt 2>&1; then
+    result "ok" "load-scanner unit tests"
+else
+    result "load-scanner unit tests failed — see output below" "load-scanner unit tests"
+    cat /tmp/ls-out.txt | sed 's/^/         /'
 fi
 
 # --- 5. SBOM version matches versions.env --------------------------------
