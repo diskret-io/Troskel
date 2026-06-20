@@ -1,12 +1,12 @@
 ---
 id: "loki-ioc-regex-compatibility-2026-06-16"
-status: "todo"
+status: "in-progress"
 priority: "medium"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-16T18:25:11.776Z"
-modified: "2026-06-17T16:01:52.571Z"
+modified: "2026-06-20T18:44:32.538Z"
 completedAt: null
 labels: ["bug", "infra"]
 order: "a0"

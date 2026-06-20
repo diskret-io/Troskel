@@ -1,15 +1,15 @@
 ---
 id: "load-scanner-verify-rootfs-2026-06-19"
-status: "in-progress"
+status: "done"
 priority: "high"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-19T00:00:00.000Z"
-modified: "2026-06-20T12:58:50.591Z"
-completedAt: null
+modified: "2026-06-20T18:43:09.677Z"
+completedAt: "2026-06-20T18:43:09.677Z"
 labels: ["security", "verification", "host"]
-order: "a0"
+order: "Zu"
 ---
 # load-scanner copies the rootfs to the air-gapped host without verifying it
 
