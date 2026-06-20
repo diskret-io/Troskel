@@ -39,6 +39,14 @@ source "${SCRIPT_DIR}/lib/stage-plan.sh"
 # shellcheck source=lib/verify-artefact.sh
 source "${SCRIPT_DIR}/lib/verify-artefact.sh"
 
+# Passphrase banner producer/consumer, paired with prepare-boot-usb.sh. The
+# boot script prints the banner via emit_passphrase_banner; Phase 4 below
+# reads it back via extract_passphrase. Co-located in one module so the banner
+# layout and the parser cannot drift apart. See the module header for the
+# PROTOCOL CONTRACT; tests/test-passphrase-banner.sh guards the round trip.
+# shellcheck source=lib/passphrase-banner.sh
+source "${SCRIPT_DIR}/lib/passphrase-banner.sh"
+
 # ── Argument parsing ──────────────────────────────────────────────────────────
 USB_MODE="all"        # all | data | boot
 UPDATE_ONLY=0
@@ -398,35 +406,23 @@ if [ "$USB_MODE" = "all" ] || [ "$USB_MODE" = "boot" ]; then
         "Writing TROSKEL-BOOT (${BOOT_DEV}) (typically 10-15 min)" \
         bash "${SCRIPT_DIR}/prepare-boot-usb.sh" "$BOOT_DEV"
 
-    # Extract the passphrase from the captured boot-script output. The
-    # boot script prints a banner block:
+    # Extract the passphrase from the captured boot-script output. The banner
+    # layout and this extraction are a single cross-script contract living in
+    # scripts/lib/passphrase-banner.sh; see its PROTOCOL CONTRACT. The producer
+    # (prepare-boot-usb.sh) prints the banner via emit_passphrase_banner; we read
+    # it back via extract_passphrase, which returns non-zero on a miss.
     #
-    #     ============================================================
-    #       SCANNER PASSPHRASE — RECORD THIS NOW
-    #     ============================================================
+    # CONTRACT NOTE (KEEP_OUT consumer): BOOT_OUT may be empty (debug mode, or a
+    # boot-script output-format change). The emptiness check below is mandatory,
+    # not optional: without it a missed extraction would produce a summary box
+    # with no passphrase and the operator would lose an unrecoverable per-build
+    # credential.
     #
-    #         <four-word-passphrase>
-    #
-    #       <explanatory text...>
-    #     ============================================================
-    #
-    # The awk state machine: enter header mode on the title line, switch
-    # to passphrase mode on the banner closing the header, exit on the
-    # banner closing the passphrase block, capture the first non-empty
-    # line in passphrase mode (the passphrase itself, ahead of the
-    # explanatory paragraph).
-    #
-    # CONTRACT NOTE (KEEP_OUT consumer): BOOT_OUT may be empty (debug
-    # mode, or a boot-script output-format change). The emptiness check
-    # below is mandatory, not optional: without it a missed extraction
-    # would produce a summary box with no passphrase and the operator
-    # would lose an unrecoverable per-build credential.
-    awk '
-        /SCANNER PASSPHRASE/        { in_header=1; next }
-        in_header && /^====/        { in_header=0; in_pass=1; next }
-        in_pass && /^====/          { exit }
-        in_pass && NF && !captured  { print $0; captured=1 }
-    ' "$BOOT_OUT" > "$PASSPHRASE_FILE"
+    # || true: extract_passphrase returns non-zero on a miss; the emptiness guard
+    # immediately below is the fail-closed handler. Letting set -e fire here would
+    # skip the diagnostic dump of $BOOT_OUT that the operator needs to diagnose
+    # the miss.
+    extract_passphrase "$BOOT_OUT" > "$PASSPHRASE_FILE" || true
 
     if [ ! -s "$PASSPHRASE_FILE" ]; then
         fail "Passphrase capture failed — could not extract from boot script output"

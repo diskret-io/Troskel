@@ -21,6 +21,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=../config/versions.env
 source "${SCRIPT_DIR}/../config/versions.env"
 
+# Passphrase banner producer. The banner layout is a cross-script contract
+# consumed by scripts/troskel-build.sh; both halves live in this module so
+# the producer and the awk that parses it cannot drift apart. See the module
+# header for the PROTOCOL CONTRACT. tests/test-passphrase-banner.sh round-trips
+# the two under `make validate`.
+# shellcheck source=lib/passphrase-banner.sh
+source "${SCRIPT_DIR}/lib/passphrase-banner.sh"
+
 CONFIG="${SCRIPT_DIR}/../config/scanner-host.bu"
 CONFIG_DIR="${SCRIPT_DIR}/../config"
 WORDLIST="${SCRIPT_DIR}/../config/eff-large-wordlist.txt"
@@ -166,14 +174,10 @@ echo ""
 echo "[+] Boot USB written to ${USB_DEV}."
 echo "    Note down today's date in log."
 echo ""
-echo "============================================================"
-echo "  SCANNER PASSPHRASE — RECORD THIS NOW"
-echo "============================================================"
+# The passphrase banner is a cross-script contract consumed by
+# scripts/troskel-build.sh; do not hand-roll it here. emit_passphrase_banner
+# lives in scripts/lib/passphrase-banner.sh alongside the extractor that parses
+# its output, so the two cannot drift. See that module's PROTOCOL CONTRACT for
+# the layout invariants the extractor depends on.
+emit_passphrase_banner "$PASSPHRASE"
 echo ""
-echo "    ${PASSPHRASE}"
-echo ""
-echo "  This passphrase is required to log in as 'scanner' on the"
-echo "  scanning host. It is NOT stored anywhere — once this script"
-echo "  exits, it cannot be recovered. Write it on the boot USB"
-echo "  label (or an equivalent secure record) before continuing."
-echo "============================================================"
