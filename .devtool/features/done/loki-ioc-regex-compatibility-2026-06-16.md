@@ -1,15 +1,15 @@
 ---
 id: "loki-ioc-regex-compatibility-2026-06-16"
-status: "in-progress"
+status: "done"
 priority: "medium"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-16T18:25:11.776Z"
-modified: "2026-06-20T18:44:32.538Z"
-completedAt: null
+modified: "2026-06-20T19:06:10.693Z"
+completedAt: "2026-06-20T19:06:10.693Z"
 labels: ["bug", "infra"]
-order: "a0"
+order: "Zt"
 ---
 # LOKI-RS regex parse errors against signature-base IOCs
 

@@ -6,10 +6,10 @@ assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-17T18:50:48.763Z"
-modified: "2026-06-18T15:47:23.117Z"
+modified: "2026-06-20T19:18:33.751Z"
 completedAt: null
 labels: ["feature"]
-order: "a3V"
+order: "a9"
 ---
 # Capa as a third detection engine
 

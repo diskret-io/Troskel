@@ -6,10 +6,10 @@ assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-17T18:50:48.772Z"
-modified: "2026-06-18T15:47:37.752Z"
+modified: "2026-06-20T19:15:05.325Z"
 completedAt: null
 labels: ["refactor", "feature"]
-order: "a3G"
+order: "a8"
 ---
 # Verdict grammar
 
