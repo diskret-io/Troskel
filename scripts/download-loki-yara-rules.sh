@@ -134,6 +134,59 @@ for FILE in hash-iocs.txt filename-iocs.txt c2-iocs.txt; do
 done
 echo "[+] IOC files downloaded from LOKI IOC base ${LOKI_IOC_BASE_VERSION}"
 
+# Normalise the regex dialect of the IOC files for LOKI-RS.
+#
+# signature-base IOCs are authored for the Python LOKI, whose `re` module
+# accepts `{,N}` as a synonym for `{0,N}` (omitted lower bound = zero). The
+# Rust `regex` crate that LOKI-RS uses rejects `{,N}`: the lower bound is
+# mandatory. Upstream patterns like `[^\\]{,20}` therefore log a parse error
+# in LOKI-RS and that IOC line is silently skipped, so we are not just looking
+# at noise, we are losing detection coverage for every pattern that uses the
+# omitted-lower-bound form. Rewriting `{,N}` to `{0,N}` is a semantics-
+# preserving transform (Python treats them as identical) that makes the
+# pattern parse under Rust.
+#
+# Scope of the rewrite, deliberately narrow to avoid corrupting patterns:
+#   - Only the regex-bearing files (filename-iocs.txt, c2-iocs.txt). NOT
+#     hash-iocs.txt: it holds hashes, never regexes, so any `{,` there would be
+#     in a comment or path and must not be touched.
+#   - Only the exact quantifier shape: a brace, a comma, one or more digits, a
+#     brace (`{,[0-9]+}`). This leaves every other use of `{` alone, including
+#     `{M,N}` and `{N}` quantifiers (already valid) and any literal brace that
+#     is not immediately followed by a comma and digits.
+#
+# CONTRACT (producer side): this transform is applied to the IOC files that
+# land in ${RULES_OUT}/iocs and are consumed by LOKI-RS at scan time. If
+# LOKI-RS ever moves to a regex engine that accepts `{,N}` (or upstream
+# normalises the patterns), this step becomes a harmless no-op and can be
+# removed. tests/test-loki-ioc-sanitise.sh guards the transform's correctness.
+sanitise_ioc_regex() {  # sanitise_ioc_regex <file>  rewrites {,N} -> {0,N} in place
+    local f="$1"
+    sed -i -E 's/\{,([0-9]+)\}/{0,\1}/g' "$f"
+}
+
+IOC_REWRITE_TOTAL=0
+for FILE in filename-iocs.txt c2-iocs.txt; do
+    TARGET="${RULES_OUT}/iocs/${FILE}"
+    [ -f "$TARGET" ] || continue
+    # Count the occurrences we are about to fix, for the post-condition.
+    BEFORE="$( { grep -oE '\{,[0-9]+\}' "$TARGET" || true; } | wc -l | tr -d ' ')"
+    sanitise_ioc_regex "$TARGET"
+    # Post-condition: re-read the file and confirm NO `{,N}` quantifier remains.
+    # A non-zero count here means the rewrite missed a form it should have
+    # caught (e.g. an unanticipated variant), which would leave LOKI-RS parse
+    # errors in place. Fail loudly rather than ship a file we claimed to fix.
+    AFTER="$( { grep -oE '\{,[0-9]+\}' "$TARGET" || true; } | wc -l | tr -d ' ')"
+    if [ "$AFTER" -ne 0 ]; then
+        echo "[!] IOC regex sanitisation incomplete: ${AFTER} '{,N}' quantifier(s)" >&2
+        echo "    remain in ${FILE} after rewrite. LOKI-RS will reject these." >&2
+        exit 1
+    fi
+    [ "$BEFORE" -gt 0 ] && echo "[+] Normalised ${BEFORE} '{,N}' quantifier(s) in ${FILE} for LOKI-RS"
+    IOC_REWRITE_TOTAL=$((IOC_REWRITE_TOTAL + BEFORE))
+done
+echo "[+] IOC regex dialect normalised (${IOC_REWRITE_TOTAL} pattern(s) rewritten for the Rust regex engine)"
+
 date -u --iso-8601=seconds > "${SIGDIR}/yara-rules-date"
 
 RULE_COUNT="$(find "${RULES_OUT}/yara" -type f \( -name '*.yar' -o -name '*.yara' \) | wc -l)"
