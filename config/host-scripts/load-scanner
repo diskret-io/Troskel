@@ -1,17 +1,113 @@
 #!/bin/bash
 set -euo pipefail
-DATA_USB="/dev/disk/by-label/TROSKEL-DATA"
-MOUNT="$(mktemp -d)"
-DEST="/var/lib/troskel"
+# DATA_USB and DEST default to the real device and load location. They are
+# overridable from the environment only so tests/test-load-scanner.sh can
+# drive the copy-and-verify logic against fixture directories without a real
+# USB or root. Production leaves both unset, so the defaults apply.
+DATA_USB="${DATA_USB:-/dev/disk/by-label/TROSKEL-DATA}"
+DEST="${DEST:-/var/lib/troskel}"
+# MOUNT may be pre-supplied (a populated fixture directory) so the verify
+# logic can be tested without a real device or root; in that case we skip the
+# mount and unmount and treat MOUNT as already populated. Production leaves it
+# unset: we create a temp dir and mount the USB read-only onto it.
+TEST_MOUNT="${MOUNT:-}"
+MOUNT="${MOUNT:-$(mktemp -d)}"
 echo "[*] Loading scanner from data USB..."
-mount -o ro "$DATA_USB" "$MOUNT" \
-    || { echo "[!] Data USB not found. Is it plugged in?"; exit 1; }
+if [ -z "$TEST_MOUNT" ]; then
+    mount -o ro "$DATA_USB" "$MOUNT" \
+        || { echo "[!] Data USB not found. Is it plugged in?"; exit 1; }
+fi
+
+# Unmount on the way out, but only if we mounted (production). In test mode
+# MOUNT is a caller-supplied fixture directory we must not touch.
+cleanup_mount() {
+    [ -z "$TEST_MOUNT" ] && umount "$MOUNT"
+    return 0
+}
 mkdir -p "$DEST"
 cp "$MOUNT/scanner-rootfs.ext4" "$DEST/"
 cp "$MOUNT/vmlinux"             "$DEST/"
 cp "$MOUNT/signature-date"      "$DEST/"
 cp "$MOUNT/yara-rules-date"     "$DEST/"
 cp "$MOUNT/scanner.env"         "$DEST/"
+
+# scanner-rootfs.ext4 verification, host side.
+#
+# CONTRACT (consumer side): scanner-rootfs.ext4 is built and hashed by
+# scripts/build-scanner-image.sh, written to TROSKEL-DATA with its sidecar
+# scanner-rootfs.ext4.sha256 by scripts/prepare-data-usb.sh (which verifies
+# the USB copy at write time via scripts/lib/verify-artefact.sh). This is the
+# air-gap consumer: the rootfs copied here is the executable image the scanner
+# VM runs, so it MUST be verified before it is trusted, and verification MUST
+# re-read the copy under $DEST (the bytes that will execute), not the USB.
+#
+# This duplicates the verify-artefact.sh logic rather than sourcing it because
+# that module is not yet shipped to the CoreOS host image (no plumbing exists
+# to place it there; see the sign-data-usb-manifest / verify-artefact host
+# story). verify-artefact.sh remains the canonical implementation; this inline
+# check mirrors its two load-bearing safety properties and must be kept in step
+# with it:
+#   1. resolve the artefact under $DEST, never at a path the sidecar names;
+#   2. reject any sidecar whose filename field is absolute or contains a slash
+#      or is a traversal (the historical bug 2: a path-bearing sidecar made
+#      verification follow the path back to the source instead of the copy).
+#
+# Absence of the sidecar is tolerated (an old USB predating sidecars), but a
+# present-but-failing verification is FATAL: unlike the manifest (metadata, a
+# warning), the rootfs is the executable image, so a corrupt or unverifiable
+# rootfs must never be loaded. On failure the bad copy is removed and the
+# script exits non-zero.
+#
+# NOTE: this verifies INTEGRITY only (bytes intact). It does not establish
+# AUTHENTICITY (that the image came from this build station); a co-resident
+# sidecar can be recomputed by anyone who can rewrite the medium. Authenticity
+# is the sign-data-usb-manifest card, which adds a signature gate ahead of
+# this check.
+ROOTFS="$DEST/scanner-rootfs.ext4"
+SIDECAR_SRC="$MOUNT/scanner-rootfs.ext4.sha256"
+if [ -f "$SIDECAR_SRC" ]; then
+    cp "$SIDECAR_SRC" "$DEST/"
+    SIDECAR="$DEST/scanner-rootfs.ext4.sha256"
+    LINE="$(head -n1 "$SIDECAR")"
+    # Safe shape: 64 lowercase hex, two spaces, a filename with no slash.
+    # This single check rejects empty/garbage lines, wrong hash length,
+    # uppercase hex, and any absolute or directory-bearing path field.
+    if ! printf '%s' "$LINE" | grep -qE '^[0-9a-f]{64}  [^/]+$'; then
+        echo "[!] scanner-rootfs.ext4.sha256 is not in safe 'sha256sum <basename>' form:" >&2
+        echo "      $LINE" >&2
+        echo "    A path-bearing sidecar is rejected here; it would otherwise let" >&2
+        echo "    verification check the wrong file. Refusing to load the scanner." >&2
+        rm -f "$ROOTFS"
+        cleanup_mount
+        exit 1
+    fi
+    FILE_FIELD="$(printf '%s' "$LINE" | sed 's/^[0-9a-f]\{64\}  //')"
+    if [ "$FILE_FIELD" = ".." ] || [ "$FILE_FIELD" = "." ]; then
+        echo "[!] scanner-rootfs.ext4.sha256 filename field is a traversal: '$FILE_FIELD'" >&2
+        echo "    Refusing to load the scanner." >&2
+        rm -f "$ROOTFS"
+        cleanup_mount
+        exit 1
+    fi
+    EXPECTED="$(printf '%s' "$LINE" | awk '{print $1}')"
+    # Re-read from $DEST: the copy that will be executed, not the USB.
+    ACTUAL="$(sha256sum "$ROOTFS" | awk '{print $1}')"
+    if [ "$ACTUAL" != "$EXPECTED" ]; then
+        echo "[!] scanner-rootfs.ext4 failed verification on the host." >&2
+        echo "    expected: $EXPECTED" >&2
+        echo "    actual  : $ACTUAL" >&2
+        echo "    The copied image does not match its sidecar. It may be corrupt or" >&2
+        echo "    truncated. Refusing to load the scanner; removing the bad copy." >&2
+        rm -f "$ROOTFS"
+        cleanup_mount
+        exit 1
+    fi
+    echo "[+] scanner-rootfs.ext4 verified against sidecar."
+else
+    echo "[!] No scanner-rootfs.ext4.sha256 on this data USB; cannot verify the"
+    echo "    scanner image. This USB predates sidecar support. Rewrite it on the"
+    echo "    build station to obtain a verifiable image. Loading unverified."
+fi
 
 # build-manifest.json propagation, USB -> /var/lib/troskel.
 #
@@ -58,5 +154,5 @@ if [ -f "$MOUNT/build-manifest.json" ]; then
     fi
 fi
 
-umount "$MOUNT"
+cleanup_mount
 echo "[+] Scanner loaded. Signature date: $(cat $DEST/signature-date)"

@@ -1,15 +1,15 @@
 ---
 id: "rewrite-verification-protocol-2026-06-16"
-status: "in-progress"
+status: "done"
 priority: "medium"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-16T18:25:11.791Z"
-modified: "2026-06-19T22:25:01.841Z"
-completedAt: null
+modified: "2026-06-20T12:58:48.029Z"
+completedAt: "2026-06-20T12:58:48.029Z"
 labels: ["refactor", "quality", "security"]
-order: "a0"
+order: "Zv"
 ---
 # Rewrite verification protocol as isolated module
 

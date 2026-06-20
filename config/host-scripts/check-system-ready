@@ -25,6 +25,20 @@ echo ""
 echo "=== System readiness check ==="
 echo ""
 
+# Required external tools. The host scripts (load-scanner, scan-wrap,
+# show-status, this script) depend on these being present in the CoreOS image.
+# sha256sum in particular underwrites load-scanner's host-side rootfs
+# verification: without it that verification cannot run. Checking the toolset
+# here turns a silent assumption about the base image into a loud, diagnosable
+# readiness failure, rather than an opaque "command not found" mid-load. If a
+# future image drop ever removed coreutils, this is where it surfaces.
+MISSING_TOOLS=""
+for TOOL in sha256sum grep sed awk date head cp mkdir mount umount; do
+    command -v "$TOOL" >/dev/null 2>&1 || MISSING_TOOLS="${MISSING_TOOLS} ${TOOL}"
+done
+check "Required tools present (sha256sum, coreutils, mount)" \
+    "$([ -z "$MISSING_TOOLS" ] && echo ok || echo "missing:${MISSING_TOOLS}")"
+
 NET=$(ip link show | grep -v "lo:" | grep -c "UP" || true)
 check "No active network interfaces beyond loopback" \
     "$([ "$NET" -eq 0 ] && echo ok || echo "${NET} interface(s) active")"
