@@ -9,6 +9,7 @@
 #   2. shellcheck passes on all shell scripts in the project
 #   3. guest/run-scan.sh uses only POSIX sh constructs (no bashisms)
 #   4. run_step unit tests (scripts/lib/run-step.sh failure-mode discipline)
+#   4b. passphrase banner round-trip (scripts/lib/passphrase-banner.sh)
 #   5. SBOM.json product version matches versions.env
 #   6. Deprecated make aliases fail with a rename pointer; no phony
 #      target is declared without a recipe.
@@ -135,6 +136,22 @@ if bash "${SCRIPT_DIR}/test-run-step.sh" > /tmp/rs-out.txt 2>&1; then
 else
     result "run_step unit tests failed — see output below" "run_step unit tests"
     cat /tmp/rs-out.txt | sed 's/^/         /'
+fi
+
+# --- 4b. passphrase banner round-trip test -----------------------------------
+# Exercises the producer/consumer contract in scripts/lib/passphrase-banner.sh:
+# prepare-boot-usb.sh prints the banner, troskel-build.sh extracts the passphrase
+# from it. Both halves live in the one module so the banner layout and the awk
+# that parses it cannot drift apart; this test is what makes that guarantee
+# load-bearing. Hermetic (no root, no container, sub-second), so it lives in
+# Tier 1 alongside the run_step tests. See tests/test-passphrase-banner.sh
+# header for the drift risk it guards.
+echo "[*] Running passphrase banner round-trip test..."
+if bash "${SCRIPT_DIR}/test-passphrase-banner.sh" > /tmp/pb-out.txt 2>&1; then
+    result "ok" "passphrase banner round-trip"
+else
+    result "passphrase banner round-trip failed — see output below" "passphrase banner round-trip"
+    cat /tmp/pb-out.txt | sed 's/^/         /'
 fi
 
 # --- 5. SBOM version matches versions.env --------------------------------

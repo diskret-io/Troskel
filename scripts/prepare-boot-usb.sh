@@ -21,6 +21,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=../config/versions.env
 source "${SCRIPT_DIR}/../config/versions.env"
 
+# Passphrase banner producer. The banner layout is a cross-script contract
+# consumed by scripts/troskel-build.sh; both halves live in this module so
+# the producer and the awk that parses it cannot drift apart. See the module
+# header for the PROTOCOL CONTRACT. tests/test-passphrase-banner.sh round-trips
+# the two under `make validate`.
+# shellcheck source=lib/passphrase-banner.sh
+source "${SCRIPT_DIR}/lib/passphrase-banner.sh"
+
 CONFIG="${SCRIPT_DIR}/../config/scanner-host.bu"
 CONFIG_DIR="${SCRIPT_DIR}/../config"
 WORDLIST="${SCRIPT_DIR}/../config/eff-large-wordlist.txt"
