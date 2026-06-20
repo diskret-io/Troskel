@@ -1,15 +1,15 @@
 ---
 id: "boot-passphrase-contract-comment-2026-06-19"
-status: "todo"
+status: "backlog"
 priority: "low"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-19T00:00:00.000Z"
-modified: "2026-06-19T22:25:36.109Z"
+modified: "2026-06-20T13:31:22.535Z"
 completedAt: null
 labels: ["docs", "quality"]
-order: "a1"
+order: "Zy"
 ---
 # Boot passphrase banner is an undocumented cross-script contract
 
