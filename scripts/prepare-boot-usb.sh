@@ -173,11 +173,34 @@ sync
 echo ""
 echo "[+] Boot USB written to ${USB_DEV}."
 echo "    Note down today's date in log."
+# CONTRACT (producer side): the passphrase banner below is parsed by
+# scripts/troskel-build.sh, which captures this script's stdout (via
+# run_step's KEEP_OUT) and runs an awk state machine over it to extract
+# the passphrase for its final summary box. The awk keys on three things,
+# all of which this banner must keep emitting verbatim:
+#   - a line containing the literal string "SCANNER PASSPHRASE" (opens
+#     the header);
+#   - a line beginning "====" closing the header, after which the first
+#     non-empty line is taken to be the passphrase itself (so the
+#     passphrase must remain the first non-empty line after that rule,
+#     ahead of the explanatory paragraph);
+#   - a second line beginning "====" closing the block.
+# Changing the title wording, the "====" rules, or the ordering (e.g.
+# putting explanatory text before the passphrase) will break extraction.
+# The orchestrator fails closed: a missed extraction aborts the build
+# with a passphrase-capture error rather than printing an empty summary
+# box, so drift is loud, not silent. But it still costs the operator a
+# failed run. If you change this banner, update the awk in
+# troskel-build.sh and its matching CONTRACT NOTE in the same commit.
 echo ""
-# The passphrase banner is a cross-script contract consumed by
-# scripts/troskel-build.sh; do not hand-roll it here. emit_passphrase_banner
-# lives in scripts/lib/passphrase-banner.sh alongside the extractor that parses
-# its output, so the two cannot drift. See that module's PROTOCOL CONTRACT for
-# the layout invariants the extractor depends on.
-emit_passphrase_banner "$PASSPHRASE"
+echo "============================================================"
+echo "  SCANNER PASSPHRASE"
+echo "============================================================"
+echo ""
+echo "    ${PASSPHRASE}"
+echo ""
+echo "  WRITE THIS DOWN NOW. It is not stored anywhere and cannot"
+echo "  be recovered once this script exits. You need it to log in"
+echo "  as the user 'scanner' on the scanning host."
+echo "============================================================"
 echo ""

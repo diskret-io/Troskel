@@ -6,8 +6,8 @@ assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-16T18:25:11.776Z"
-modified: "2026-06-20T20:37:03.505Z"
-completedAt: "2026-06-20T20:37:03.505Z"
+modified: "2026-06-20T19:06:10.693Z"
+completedAt: "2026-06-20T19:06:10.693Z"
 labels: ["bug", "infra"]
 order: "Zt"
 ---

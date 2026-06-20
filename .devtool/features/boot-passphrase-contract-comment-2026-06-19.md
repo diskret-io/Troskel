@@ -6,7 +6,7 @@ assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-19T00:00:00.000Z"
-modified: "2026-06-20T20:37:06.941Z"
+modified: "2026-06-20T19:18:10.154Z"
 completedAt: null
 labels: ["docs", "quality"]
 order: "a0"
