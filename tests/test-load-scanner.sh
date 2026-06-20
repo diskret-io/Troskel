@@ -69,13 +69,15 @@ make_usb() {
 }
 
 # run_load <usb-dir>: runs load-scanner against the fixture, setting globals
-# RUN_RC, RUN_OUT, DEST_DIR. Not wrapped in command substitution, so the
-# global assignments survive (a $(...) subshell would discard them).
+# RUN_RC, RUN_OUT, DEST_DIR, ISSUE_FILE. Not wrapped in command substitution,
+# so the global assignments survive (a $(...) subshell would discard them).
 run_load() {
     local usb="$1"
     DEST_DIR="$(mktemp -d "$WORK/dest.XXXXXX")"
+    # Per-run /etc/issue fixture so banner assertions read what THIS run wrote.
+    ISSUE_FILE="$(mktemp "$WORK/issue.XXXXXX")"
     set +e
-    RUN_OUT="$(MOUNT="$usb" DEST="$DEST_DIR" bash "$LOAD_SCANNER" 2>&1)"
+    RUN_OUT="$(MOUNT="$usb" DEST="$DEST_DIR" ETC_ISSUE="$ISSUE_FILE" bash "$LOAD_SCANNER" 2>&1)"
     RUN_RC=$?
     set -e
 }
@@ -173,5 +175,82 @@ may be reading the wrong file. Output:
 $RUN_OUT"
 pass "verification computes the hash over the copied bytes"
 
+# ── Test 7: good load writes a banner with the real dates ────────────────────
+# Failure mode guarded: the pre-login banner must show the loaded dates, read
+# from $DEST (the same source show-status uses), so the two displays agree. A
+# banner that showed nothing, or showed the USB copy rather than the loaded
+# copy, would defeat the point of the card.
+step "Test 7: good load writes /etc/issue with the loaded dates"
+USB="$(make_usb good)"
+run_load "$USB"; RC="$RUN_RC"
+[ "$RC" -eq 0 ] || fail "good load: rc was $RC, expected 0. Output:
+$RUN_OUT"
+[ -f "$ISSUE_FILE" ] || fail "good load: no /etc/issue was written"
+grep -q "^  Signature date  : 2026-06-19$" "$ISSUE_FILE" \
+    || fail "good load: banner missing the loaded signature date. Banner:
+$(cat "$ISSUE_FILE")"
+grep -q "^  YARA rules date : 2026-06-19$" "$ISSUE_FILE" \
+    || fail "good load: banner missing the loaded YARA date. Banner:
+$(cat "$ISSUE_FILE")"
+# The dates in the banner must equal what show-status would read from $DEST.
+[ "$(cat "$ISSUE_FILE" | grep 'Signature date' | sed 's/.*: //')" \
+    = "$(cat "$DEST_DIR/signature-date")" ] \
+    || fail "good load: banner signature date disagrees with \$DEST/signature-date"
+echo "$RUN_OUT" | grep -q "Pre-login banner updated" \
+    || fail "good load: no banner-updated confirmation in output"
+pass "good load writes a banner agreeing with the loaded dates"
+
+# ── Test 8: unverified-but-tolerated load still writes the banner ─────────────
+# Failure mode guarded: the absent-sidecar path (Test 5) loads successfully and
+# must still get a real banner. The banner write sits after the verification
+# gate, so a path that loads without a sidecar must reach it. A banner that
+# only appeared on the sidecar-present path would leave old-USB operators with
+# a stale default screen despite a successful load.
+step "Test 8: absent-sidecar load (tolerated) still writes the banner"
+USB="$(make_usb missing)"
+run_load "$USB"; RC="$RUN_RC"
+[ "$RC" -eq 0 ] || fail "absent sidecar: rc was $RC, expected 0. Output:
+$RUN_OUT"
+grep -q "^  Signature date  : 2026-06-19$" "$ISSUE_FILE" \
+    || fail "absent sidecar: banner missing the loaded date. Banner:
+$(cat "$ISSUE_FILE")"
+pass "tolerated unverified load still produces a dated banner"
+
+# ── Test 9: a fatal load does NOT write a banner ─────────────────────────────
+# Failure mode guarded: THE display-correctness property. A load that fails
+# verification must not write /etc/issue, so the operator is left seeing the
+# Butane default ("not loaded") rather than a banner this script produced. If a
+# failing load wrote a banner, the pre-login screen could show dates for an
+# image that was rejected and removed. We assert the issue fixture is still
+# empty (load-scanner exited before the banner block) after a fatal load.
+step "Test 9: fatal load leaves the banner unwritten"
+USB="$(make_usb corrupt-target)"
+run_load "$USB"; RC="$RUN_RC"
+[ "$RC" -ne 0 ] || fail "corrupt image: expected non-zero rc"
+[ ! -s "$ISSUE_FILE" ] \
+    || fail "corrupt image: banner was written on a FAILED load. Banner:
+$(cat "$ISSUE_FILE")"
+pass "a fatal load writes no banner; the default stands"
+
+# ── Test 10: banner per-field fallback yields 'not loaded' for an absent file ─
+# Failure mode guarded: the banner's per-field `|| echo 'not loaded'` idiom.
+# Scope note: in the normal USB flow this fallback is not reached, because
+# load-scanner copies both date files early under `set -e`, so a USB missing a
+# date file fails at that cp and never reaches the banner. The fallback is
+# defensive cover for a file vanishing between copy and banner generation. This
+# test therefore exercises the idiom directly (the exact expression the banner
+# block uses) rather than driving it through load-scanner, asserting a present
+# file reads through and an absent file degrades to 'not loaded' without
+# aborting under set -e.
+step "Test 10: banner per-field fallback yields 'not loaded' for an absent file"
+MISSING_DIR="$(mktemp -d "$WORK/miss.XXXXXX")"
+printf '2026-06-19\n' > "$MISSING_DIR/signature-date"   # yara-rules-date absent
+SIG_DATE="$(cat "$MISSING_DIR/signature-date" 2>/dev/null || echo 'not loaded')"
+YARA_DATE="$(cat "$MISSING_DIR/yara-rules-date" 2>/dev/null || echo 'not loaded')"
+[ "$SIG_DATE" = "2026-06-19" ] || fail "fallback: present file did not read through"
+[ "$YARA_DATE" = "not loaded" ] || fail "fallback: absent file did not yield 'not loaded'"
+pass "per-field fallback shows 'not loaded' only for the missing field"
+
+
 step "Result"
-echo "[+] All ${PASS} assertions passed. Host-side rootfs verification is correct."
+echo "[+] All ${PASS} assertions passed. Host-side rootfs verification and pre-login banner generation are correct."

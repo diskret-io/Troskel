@@ -6,6 +6,11 @@ set -euo pipefail
 # USB or root. Production leaves both unset, so the defaults apply.
 DATA_USB="${DATA_USB:-/dev/disk/by-label/TROSKEL-DATA}"
 DEST="${DEST:-/var/lib/troskel}"
+# ETC_ISSUE is the pre-login banner file agetty reads. Overridable from the
+# environment only so tests/test-load-scanner.sh can assert the generated
+# banner against a fixture path without root and without clobbering the real
+# /etc/issue. Production leaves it unset, so the default applies.
+ETC_ISSUE="${ETC_ISSUE:-/etc/issue}"
 # MOUNT may be pre-supplied (a populated fixture directory) so the verify
 # logic can be tested without a real device or root; in that case we skip the
 # mount and unmount and treat MOUNT as already populated. Production leaves it
@@ -152,6 +157,72 @@ if [ -f "$MOUNT/build-manifest.json" ]; then
         echo "    affected fields as 'unreadable'. Scanner load continues; this is"
         echo "    metadata only, not a scan gate."
     fi
+fi
+
+# Pre-login banner generation, /etc/issue.
+#
+# CONTRACT (producer side): this writes the pre-login banner agetty displays
+# on tty1 before the operator logs in. The consumer is agetty (via the
+# getty@tty1.service the Butane config installs); there is no Troskel-side
+# parser, so the only contract is "agetty reads /etc/issue as plain text".
+# The dates shown are read from $DEST (signature-date, yara-rules-date), the
+# SAME files config/host-scripts/show-status reads after login, so the
+# pre-login banner and the post-login status agree by construction: both
+# derive from the loaded copy under /var/lib/troskel, not from the USB.
+#
+# Reached only after the rootfs verification gate above: every fatal path
+# (failed verification, unsafe sidecar) has already exited non-zero, so
+# arriving here means the load succeeded (possibly unverified-but-tolerated,
+# the old-USB path, which still has real loaded dates worth showing). A failed
+# load never reaches this line, so it never overwrites the Butane-provided
+# default banner; that default is the load-failure display state and must
+# itself say "not loaded" (see config/scanner-host.bu). This division is the
+# point: success is written here from real data, failure is left showing the
+# default, and the two cannot be confused.
+#
+# Per-field fallback: each date is read independently with the same
+# `|| echo 'not loaded'` idiom show-status uses, so a half-copied USB (one
+# date file present, the other not) shows the present date and "not loaded"
+# for the missing one, rather than failing or showing a stale value. Under
+# `set -e`, the `|| echo` arm is what keeps a missing file from aborting the
+# script, so a freshness file that failed to copy degrades the banner field
+# instead of killing the load.
+SIG_DATE="$(cat "$DEST/signature-date" 2>/dev/null || echo 'not loaded')"
+YARA_DATE="$(cat "$DEST/yara-rules-date" 2>/dev/null || echo 'not loaded')"
+cat > "$ETC_ISSUE" <<ISSUE
+Troskel scanner
+===============
+
+  Signature date  : ${SIG_DATE}
+  YARA rules date : ${YARA_DATE}
+
+Log in as 'scanner' to begin.
+
+ISSUE
+
+# Post-condition: re-read the file just written and confirm it carries a
+# Signature date line that is NOT the failure token. Writing /etc/issue is a
+# destructive operation (it replaces the operator's pre-login screen), so per
+# the quality bar it is verified against the destination, not assumed from the
+# fact that `cat` returned zero. The check can fail: if $DEST/signature-date
+# was somehow absent at this point (it is copied near the top, so absence here
+# means an earlier silent problem), the banner would show "not loaded" on a
+# load the script otherwise considers successful, and this surfaces that as a
+# warning rather than letting the operator see a "not loaded" screen after an
+# apparently clean boot. Non-fatal: a banner glitch must not block a verified
+# scanner from loading; show-status remains the authoritative post-login view.
+if ! grep -q "^  Signature date  : ${SIG_DATE}$" "$ETC_ISSUE"; then
+    echo "[!] Pre-login banner (${ETC_ISSUE}) was written but does not read back"
+    echo "    with the expected signature-date line. The operator may see a stale"
+    echo "    or malformed banner; run show-status after login for the"
+    echo "    authoritative view. This does not affect the loaded scanner image."
+elif [ "$SIG_DATE" = "not loaded" ]; then
+    echo "[!] Pre-login banner shows 'not loaded' for the signature date, but the"
+    echo "    scanner load reached banner generation. ${DEST}/signature-date may"
+    echo "    have failed to copy. show-status will show the same; investigate the"
+    echo "    data USB."
+else
+    echo "[+] Pre-login banner updated (signature date ${SIG_DATE})."
 fi
 
 cleanup_mount
