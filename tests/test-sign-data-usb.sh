@@ -206,6 +206,45 @@ set +e; medium_manifest_verify_sig "$MED" "$WORK/pub.pem" >/dev/null; RC=$?; set
 [ "$RC" -ne 0 ] || fail "forged manifest passed the signature gate"
 pass "signature gate rejects a forged manifest before its file list is trusted"
 
+# ── Test 11: keypair match check accepts the matching public key ─────────────
+# Failure mode guarded: the signer's optional cross-check must ACCEPT the host
+# public key that corresponds to the signing private key, or it would refuse
+# legitimate signing. Note the subtle trap this proves absent: a public-key file
+# carries a trailing newline that command-capture strips, so a naive byte
+# compare would FALSELY mismatch a correct keypair. The fingerprint comparison
+# must be immune to that.
+step "Test 11: signing key matches its own public key -> accepted"
+set +e; medium_manifest_keypair_matches "$WORK/priv.pem" "$WORK/pub.pem"; RC=$?; set -e
+[ "$RC" -eq 0 ] || fail "matching keypair reported as mismatch (rc=$RC) -- false refusal"
+pass "matching private/public keypair is accepted by the cross-check"
+
+# ── Test 12: keypair match check rejects a non-matching public key ───────────
+# Failure mode guarded: THE silent self-mismatch. Signing with priv.pem while
+# the host trusts evilpub.pem (a different keypair) must be caught at the desk.
+step "Test 12: signing key vs a different public key -> rejected"
+set +e; medium_manifest_keypair_matches "$WORK/priv.pem" "$WORK/evilpub.pem"; RC=$?; set -e
+[ "$RC" -ne 0 ] || fail "mismatched keypair reported as match -- self-mismatch would reach the host"
+pass "mismatched private/public keypair is rejected by the cross-check"
+
+# ── Test 13: fingerprint is immune to public-key formatting noise ────────────
+# Failure mode guarded: a reformatted-but-identical public key (extra blank
+# lines, missing trailing newline) must still match. Proves the canonicalisation
+# is real and not an accident of identical formatting.
+step "Test 13: keypair match survives public-key reformatting"
+{ cat "$WORK/pub.pem"; echo; echo; } > "$WORK/pub.messy"
+set +e; medium_manifest_keypair_matches "$WORK/priv.pem" "$WORK/pub.messy"; RC=$?; set -e
+[ "$RC" -eq 0 ] || fail "reformatted-but-identical public key falsely mismatched (rc=$RC)"
+pass "keypair match canonicalises away public-key formatting differences"
+
+# ── Test 14: unreadable public key is treated as mismatch, not pass ──────────
+# Failure mode guarded: a garbage/unreadable host public key must NOT compare
+# equal (which would let signing proceed on a key the host cannot be using).
+step "Test 14: unreadable host public key -> mismatch (fails closed)"
+printf 'not a key\n' > "$WORK/garbage.pub"
+set +e; medium_manifest_keypair_matches "$WORK/priv.pem" "$WORK/garbage.pub"; RC=$?; set -e
+[ "$RC" -ne 0 ] || fail "unreadable public key compared equal -- must fail closed"
+pass "unreadable host public key is treated as mismatch (fails closed)"
+
 step "Result"
 echo "[+] All ${PASS} assertions passed. Medium-manifest authenticity module is correct."
 echo ""

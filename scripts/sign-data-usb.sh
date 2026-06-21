@@ -20,8 +20,9 @@
 # set. See that module's header for the full producer/consumer contract.
 set -euo pipefail
 
-USB_DEV="${1:?Usage: sign-data-usb.sh <device> <private-key.pem>}"
-KEYFILE="${2:?Usage: sign-data-usb.sh <device> <private-key.pem>}"
+USB_DEV="${1:?Usage: sign-data-usb.sh <device> <private-key.pem> [host-public-key.pem]}"
+KEYFILE="${2:?Usage: sign-data-usb.sh <device> <private-key.pem> [host-public-key.pem]}"
+HOST_PUBKEY="${3:-}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib/medium-manifest.sh
@@ -37,6 +38,31 @@ command -v jq      >/dev/null 2>&1 || { echo "[!] jq not found (build/sign stati
 # operator points us at a public key, wrong-algorithm key, or non-key file.
 openssl pkey -in "$KEYFILE" -noout 2>/dev/null \
     || { echo "[!] ${KEYFILE} is not a readable private key." >&2; exit 1; }
+
+# Optional sign-time cross-check (the silent self-mismatch guard). If the admin
+# supplies the public key their target host was built with, confirm the private
+# key we are about to sign with actually corresponds to it, and REFUSE on a
+# mismatch. This catches a keypair mix-up here, at the signing desk, rather than
+# at the air-gapped host, where the host's resulting BAD_SIGNATURE refusal is
+# indistinguishable from an attack and there are no tools to diagnose it. See
+# docs/medium-authenticity-contract.md (Signing behaviour). When no host public
+# key is supplied, this check is skipped and only the always-on post-sign
+# self-verification (below) runs.
+if [ -n "$HOST_PUBKEY" ]; then
+    [ -f "$HOST_PUBKEY" ] || { echo "[!] Host public key not found: ${HOST_PUBKEY}" >&2; exit 1; }
+    openssl pkey -pubin -in "$HOST_PUBKEY" -noout 2>/dev/null \
+        || { echo "[!] ${HOST_PUBKEY} is not a readable public key." >&2; exit 1; }
+    if ! medium_manifest_keypair_matches "$KEYFILE" "$HOST_PUBKEY"; then
+        echo "[!] REFUSING TO SIGN: the private key does not match the host public key." >&2
+        echo "    Signing key     : ${KEYFILE}" >&2
+        echo "    Host public key : ${HOST_PUBKEY}" >&2
+        echo "    A medium signed with this key would be refused by that host as" >&2
+        echo "    BAD_SIGNATURE. Use the private key matching the host's baked key," >&2
+        echo "    or rebuild the host's boot ISO with this key's public half." >&2
+        exit 1
+    fi
+    echo "[*] Signing key matches the supplied host public key."
+fi
 
 if echo "$USB_DEV" | grep -q "nvme"; then PART="${USB_DEV}p1"; else PART="${USB_DEV}1"; fi
 [ -b "$PART" ] || { echo "[!] ${PART} is not a block device. Is the medium prepared?" >&2; exit 1; }
@@ -60,7 +86,7 @@ mount -o ro "$PART" "$MOUNT"
 # absence means the medium was not prepared by a 1.0.0+ prepare-data-usb.sh;
 # that is an unsigned-legacy situation to refuse, not to paper over.
 [ -f "${MOUNT}/build-manifest.json" ] \
-    || { echo "[!] build-manifest.json missing on medium — re-prepare before signing." >&2; exit 1; }
+    || { echo "[!] build-manifest.json missing on medium, re-prepare before signing." >&2; exit 1; }
 
 COMMIT="$(jq -r '.build_environment.troskel_commit // empty' "${MOUNT}/build-manifest.json")"
 DIRTY="$(jq -r  '.build_environment | if has("troskel_dirty") then (.troskel_dirty|tostring) else empty end' "${MOUNT}/build-manifest.json")"

@@ -140,6 +140,45 @@ medium_manifest_verify_set() {
     echo "$MM_OK"; return 0
 }
 
+# medium_manifest_pubkey_fingerprint <key.pem> [pubin]
+# Prints a canonical fingerprint of a public key: the SHA-256 of its DER
+# encoding. This is immune to PEM formatting noise (trailing newlines, blank
+# lines, line-wrap differences), which a naive text comparison is NOT: a public
+# key file on disk typically carries a trailing newline that command-capture
+# strips, so a byte comparison would report a false mismatch on a correct key.
+# Always compare keys by this fingerprint, never by raw PEM text.
+#
+# With no second argument the input is treated as a PRIVATE key and its public
+# half is derived. With "pubin" the input is treated as a PUBLIC key. Both
+# routes emit the SAME fingerprint for the same underlying key, which is what
+# lets the keypair-match check below work: derive from the private key, compare
+# to the supplied public key.
+#
+# Shared by the signer's optional cross-check (scripts/sign-data-usb.sh) and
+# the boot-build drift check (scripts/prepare-boot-usb.sh), so both sites
+# canonicalise keys identically and cannot disagree on whether two keys match.
+medium_manifest_pubkey_fingerprint() {
+    local key="$1" mode="${2:-}"
+    if [ "$mode" = "pubin" ]; then
+        openssl pkey -pubin -in "$key" -pubout -outform DER 2>/dev/null | sha256sum | awk '{print $1}'
+    else
+        openssl pkey -in "$key" -pubout -outform DER 2>/dev/null | sha256sum | awk '{print $1}'
+    fi
+}
+
+# medium_manifest_keypair_matches <private-key.pem> <public-key.pem>
+# Returns 0 if the private key's public half equals the given public key, i.e.
+# they are the same keypair; non-zero otherwise. Used by the signer to refuse
+# signing with a key the target host will not trust (the silent self-mismatch
+# failure mode). A blank fingerprint (unreadable key) never compares equal, so
+# an unreadable key is treated as a mismatch, not a pass.
+medium_manifest_keypair_matches() {
+    local priv="$1" pub="$2" fp_priv fp_pub
+    fp_priv="$(medium_manifest_pubkey_fingerprint "$priv")"
+    fp_pub="$(medium_manifest_pubkey_fingerprint "$pub" pubin)"
+    [ -n "$fp_priv" ] && [ -n "$fp_pub" ] && [ "$fp_priv" = "$fp_pub" ]
+}
+
 # medium_manifest_verify_hashes <dir>
 # Checks every file named in the (already signature-verified, already
 # set-verified) manifest against its recorded SHA-256, re-reading from <dir>.

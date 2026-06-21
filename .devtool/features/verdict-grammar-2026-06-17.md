@@ -3,13 +3,13 @@ id: "verdict-grammar-2026-06-17"
 status: "backlog"
 priority: "low"
 assignee: "k"
-epic: null
+epic: "tier-2-remediation-plan-2026-06-17"
 dueDate: null
 created: "2026-06-17T18:50:48.772Z"
-modified: "2026-06-20T19:15:05.325Z"
+modified: "2026-06-21T19:46:44.430Z"
 completedAt: null
 labels: ["refactor", "feature"]
-order: "a8"
+order: "Zy"
 ---
 # Verdict grammar
 
