@@ -171,6 +171,23 @@ else
     cat /tmp/ls-out.txt | sed 's/^/         /'
 fi
 
+# --- 4d. manifest propagation + parser-drift test ----------------------------
+# Exercises build-manifest.json parsing on the host side (show-status display
+# states: valid / corrupt / absent, and the troskel_dirty unquoted-boolean
+# matcher) plus the vendored-region drift guard: scripts/lib/manifest-parse.sh
+# is the canonical parser, embedded byte-for-byte into load-scanner and
+# show-status because the host has no scripts/lib to source. The test asserts
+# all three copies match and that each display state is distinct. Hermetic (no
+# root, no device, jq optional and CI-covered), so it belongs in Tier 1. See
+# tests/test-manifest-propagation.sh header for the bug history it guards.
+echo "[*] Running manifest propagation tests..."
+if bash "${SCRIPT_DIR}/test-manifest-propagation.sh" > /tmp/mp-out.txt 2>&1; then
+    result "ok" "manifest propagation + parser-drift"
+else
+    result "manifest propagation tests failed, see output below" "manifest propagation + parser-drift"
+    cat /tmp/mp-out.txt | sed 's/^/         /'
+fi
+
 # --- 5. SBOM version matches versions.env --------------------------------
 # SBOM.json is generated on the build station, not in CI. A TROSKEL_VERSION
 # bump committed without regenerating SBOM.json leaves the committed SBOM
