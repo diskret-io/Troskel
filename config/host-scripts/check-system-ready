@@ -28,15 +28,18 @@ echo ""
 # Required external tools. The host scripts (load-scanner, scan-wrap,
 # show-status, this script) depend on these being present in the CoreOS image.
 # sha256sum in particular underwrites load-scanner's host-side rootfs
-# verification: without it that verification cannot run. Checking the toolset
-# here turns a silent assumption about the base image into a loud, diagnosable
-# readiness failure, rather than an opaque "command not found" mid-load. If a
-# future image drop ever removed coreutils, this is where it surfaces.
+# verification: without it that verification cannot run. openssl underwrites
+# the data-USB manifest signature check (the authenticity gate in
+# load-scanner): without it that verification cannot run either, and its
+# absence would surface as an opaque "command not found" mid-load rather than
+# here. Checking the toolset here turns a silent assumption about the base
+# image into a loud, diagnosable readiness failure. If a future image drop
+# ever removed coreutils or openssl, this is where it surfaces.
 MISSING_TOOLS=""
-for TOOL in sha256sum grep sed awk date head cp mkdir mount umount; do
+for TOOL in sha256sum openssl grep sed awk date head cp mkdir mount umount; do
     command -v "$TOOL" >/dev/null 2>&1 || MISSING_TOOLS="${MISSING_TOOLS} ${TOOL}"
 done
-check "Required tools present (sha256sum, coreutils, mount)" \
+check "Required tools present (sha256sum, openssl, coreutils, mount)" \
     "$([ -z "$MISSING_TOOLS" ] && echo ok || echo "missing:${MISSING_TOOLS}")"
 
 NET=$(ip link show | grep -v "lo:" | grep -c "UP" || true)

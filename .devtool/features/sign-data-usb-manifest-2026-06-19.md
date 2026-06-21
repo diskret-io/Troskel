@@ -1,15 +1,15 @@
 ---
 id: "sign-data-usb-manifest-2026-06-19"
-status: "todo"
+status: "in-progress"
 priority: "high"
 assignee: "k"
 epic: "tier-2-remediation-plan-2026-06-17"
 dueDate: null
 created: "2026-06-19T00:00:00.000Z"
-modified: "2026-06-20T13:31:15.138Z"
+modified: "2026-06-21T13:28:27.269Z"
 completedAt: null
 labels: ["security", "authenticity", "verification", "host"]
-order: "a3"
+order: "a0"
 ---
 # Sign the data-USB manifest so the air-gapped host can verify authenticity
 
