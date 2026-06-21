@@ -52,19 +52,55 @@ echo "=== Tier 1: static validation ==="
 echo ""
 
 # --- 1. Butane config compiles -------------------------------------------
-# Substitute the sentinel with a syntactically valid dummy hash so
-# butane --strict does not reject the config as malformed.
+# The committed config carries two build-time sentinels: the password hash
+# (a quoted value) and the verifier-key marker comment
+# @@SIGN_PUBKEY_FILE_ENTRY@@ (a YAML comment, so the raw committed file
+# already compiles). We check BOTH shapes the build can produce:
+#   (a) PERMISSIVE: the marker comment is removed, no key entry. This is the
+#       committed file's effective shape once the comment is dropped.
+#   (b) SIGNING: the marker is replaced with a real storage.files key entry
+#       pointing at a dummy public key in the files-dir. This exercises the
+#       signing YAML shape, which a comment-only check would never compile.
+# Both must compile under butane --strict. The signing case is the
+# regression guard for the marker-substitution shape: if a future edit
+# breaks the injected entry's YAML, this fails here, in validate, not at a
+# real build.
 echo "[*] Checking Butane config..."
-TMP_CONFIG="$(mktemp --suffix=.bu)"
-trap 'rm -f "$TMP_CONFIG"' EXIT
-sed 's|@@SCANNER_PASSWORD_HASH@@|$6$dummysalt$dummyhashfortestingpurposesonly0000000000000000000000000000000000000000000000000000.|' \
-    config/scanner-host.bu > "$TMP_CONFIG"
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
+DUMMY_HASH='$6$dummysalt$dummyhashfortestingpurposesonly0000000000000000000000000000000000000000000000000000.'
 
-if butane --strict --files-dir config "$TMP_CONFIG" > /dev/null 2>&1; then
-    result "ok" "Butane config compiles cleanly"
+# Shared files-dir for both checks: a copy of config plus a dummy pubkey so
+# the signing entry's `local:` source resolves. The dummy key need not be a
+# real key for butane --check (Butane embeds file bytes without parsing them).
+cp -r config "$TMP_DIR/config"
+printf -- '-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAdummykeybytesfortestingonly000000000000000=\n-----END PUBLIC KEY-----\n' \
+    > "$TMP_DIR/config/troskel-sign.pub"
+
+# (a) PERMISSIVE shape: drop the marker comment line.
+PERM_CONFIG="$TMP_DIR/perm.bu"
+sed "s|@@SCANNER_PASSWORD_HASH@@|${DUMMY_HASH}|" config/scanner-host.bu \
+    | awk 'index($0,"@@SIGN_PUBKEY_FILE_ENTRY@@"){next}{print}' > "$PERM_CONFIG"
+
+# (b) SIGNING shape: replace the marker comment line with a real key entry.
+SIGN_CONFIG="$TMP_DIR/sign.bu"
+KEY_ENTRY="$(printf '    - path: /etc/troskel/sign.pub\n      mode: 0644\n      contents:\n        local: troskel-sign.pub')"
+sed "s|@@SCANNER_PASSWORD_HASH@@|${DUMMY_HASH}|" config/scanner-host.bu \
+    | awk -v repl="$KEY_ENTRY" 'index($0,"@@SIGN_PUBKEY_FILE_ENTRY@@"){print repl;next}{print}' > "$SIGN_CONFIG"
+
+BUTANE_OK=1
+for SHAPE_CONFIG in "$PERM_CONFIG" "$SIGN_CONFIG"; do
+    butane --strict --files-dir "$TMP_DIR/config" "$SHAPE_CONFIG" > /dev/null 2>&1 || BUTANE_OK=0
+done
+if [ "$BUTANE_OK" -eq 1 ]; then
+    result "ok" "Butane config compiles cleanly (permissive and signing shapes)"
 else
-    result "$(butane --strict --files-dir config "$TMP_CONFIG" 2>&1 || true)" \
-        "Butane config compiles cleanly"
+    {
+        echo "permissive shape:"; butane --strict --files-dir "$TMP_DIR/config" "$PERM_CONFIG" 2>&1 || true
+        echo "signing shape:";    butane --strict --files-dir "$TMP_DIR/config" "$SIGN_CONFIG" 2>&1 || true
+    } > "$TMP_DIR/butane-err.txt"
+    result "$(cat "$TMP_DIR/butane-err.txt")" \
+        "Butane config compiles cleanly (permissive and signing shapes)"
 fi
 
 # --- 2. shellcheck -----------------------------------------------------------

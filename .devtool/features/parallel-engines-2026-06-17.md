@@ -3,7 +3,7 @@ id: "parallel-engines-2026-06-17"
 status: "backlog"
 priority: "medium"
 assignee: "k"
-epic: null
+epic: "tier-3-remediation-plan-2026-06-21"
 dueDate: null
 created: "2026-06-17T18:50:48.770Z"
 modified: "2026-06-19T23:16:05.452Z"

@@ -1,5 +1,3 @@
-
-
 #!/bin/bash
 set -euo pipefail
 
@@ -127,5 +125,3 @@ else
     echo "[+] All checks passed. System is ready to scan."
     exit 0
 fi
-
-================================================================================

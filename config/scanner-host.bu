@@ -40,6 +40,14 @@ storage:
       contents:
         local: host-scripts/check-system-ready
 
+    # Data-USB verifier public key, baked only on a SIGNING build. The line
+    # below is a sentinel that scripts/prepare-boot-usb.sh replaces in the build
+    # copy with the real storage.files entry (SIGNING) or removes entirely
+    # (PERMISSIVE). The committed config never carries a key. Butane never sees
+    # the sentinel: substitution happens before butane --check runs. See
+    # docs/medium-authenticity-contract.md and scripts/lib/boot-sign-key.sh.
+    # @@SIGN_PUBKEY_FILE_ENTRY@@
+
     # Default pre-login banner, shown by agetty on tty1 before login.
     #
     # CONTRACT (default/fallback side): config/host-scripts/load-scanner

@@ -2,16 +2,18 @@
 # scripts/lib/medium-manifest.sh
 # Directory-level operations for the signed TROSKEL-DATA medium manifest.
 # Sourced by the producer (scripts/sign-data-usb.sh, on the offline signing
-# machine) and the consumer (config/host-scripts/load-scanner, on the
-# air-gapped scanning host). Operating on a directory rather than a device is
-# what lets both the device scripts and the hermetic test exercise identical
-# logic: the producer and consumer compute the file set the SAME way, so the
-# set-equality contract cannot drift between them.
+# machine). The host-side VERIFICATION subset is also bundled into
+# config/host-scripts/load-scanner at build time (the host has no scripts/lib to
+# source at runtime); see the REGION markers below and the build splice in
+# scripts/prepare-boot-usb.sh. Operating on a directory rather than a device is
+# what lets the device scripts, the host, and the hermetic tests exercise
+# identical logic: producer and consumer compute the file set the SAME way, so
+# the set-equality contract cannot drift between them.
 #
-# This module is the single definition of:
+# This module is the single authored definition of:
 #   - which files on the medium are covered by the signature (the walk),
 #   - the manifest's on-disk shape,
-#   - the set-equality check the host enforces on load.
+#   - the verification checks the host enforces on load.
 #
 # It does NOT mount, unmount, or touch devices. Callers pass a directory that
 # is the mounted medium root. It does NOT embed or distribute keys; callers
@@ -37,11 +39,24 @@
 # Result tokens (printed on stdout; callers key on the EXIT CODE, the token is
 # for logs). openssl prints its own pass/fail string to stdout AND sets rc, so
 # downstream logic must never grep that string; it keys on rc only.
+#
+# BUNDLING: the region between the REGION:medium-manifest-verify markers below
+# is the host-side verification subset. scripts/prepare-boot-usb.sh splices it
+# into config/host-scripts/load-scanner at build time, replacing that script's
+# `# @@REGION:medium-manifest-verify@@` marker. The region is therefore the
+# single source of truth for host verification; do not copy it by hand. Keep the
+# region self-contained: it must depend on nothing outside itself except
+# coreutils, openssl, jq, and the two NAME variables and MM_* tokens it defines.
+
+# >>> BEGIN REGION:medium-manifest-verify >>>
+# Host-side medium-manifest verification. Single source of truth, bundled into
+# load-scanner at build time. Self-contained: depends only on coreutils, openssl,
+# jq, and the definitions in this region. See scripts/lib/medium-manifest.sh.
 MEDIUM_MANIFEST_NAME="medium-manifest.json"
 MEDIUM_SIG_NAME="medium-manifest.json.sig"
 
 MM_OK="OK"
-MM_BAD_SIG="BAD_SIGNATURE"        # signature does not verify against manifest+key
+MM_BAD_SIG="BAD_SIGNATURE"         # signature does not verify against manifest+key
 MM_MISSING_SIG="MISSING_SIGNATURE" # manifest and/or signature absent
 MM_MALFORMED="MALFORMED_MANIFEST"  # manifest not parseable / wrong shape / bad name field
 MM_SET_MISMATCH="SET_MISMATCH"     # medium files != manifest files
@@ -57,43 +72,6 @@ medium_manifest_filelist() {
         ! -name "$MEDIUM_MANIFEST_NAME" \
         ! -name "$MEDIUM_SIG_NAME" \
         -printf '%f\n' | LC_ALL=C sort
-}
-
-# medium_manifest_build <dir> <commit> <dirty:true|false> <generated_at>
-# Walks <dir>, hashes each covered file, prints the manifest JSON on stdout.
-# Returns non-zero if the directory contains no covered files (a manifest over
-# nothing is never legitimate here and must not be signed).
-medium_manifest_build() {
-    local dir="$1" commit="$2" dirty="$3" gen="$4" entries count
-    entries="$(
-        medium_manifest_filelist "$dir" | while IFS= read -r name; do
-            # A name with a slash cannot occur from -printf '%f', but assert it
-            # so a future change to the walk cannot silently admit a path.
-            case "$name" in */*|"") echo "__BAD__"; break;; esac
-            local sum
-            sum="$(sha256sum "${dir}/${name}" | awk '{print $1}')"
-            jq -nc --arg n "$name" --arg s "$sum" '{name:$n, sha256:$s}'
-        done | jq -sc '.'
-    )"
-    case "$entries" in *__BAD__*) echo "[!] medium_manifest_build: path in filename" >&2; return 2;; esac
-    count="$(printf '%s' "$entries" | jq 'length')"
-    [ "$count" -ge 1 ] || { echo "[!] medium_manifest_build: no covered files" >&2; return 2; }
-    jq -n \
-        --arg ver "1" --arg commit "$commit" --arg dirty "$dirty" \
-        --arg gen "$gen" --argjson files "$entries" \
-        '{manifest_version:$ver, troskel_commit:$commit,
-          troskel_dirty:($dirty=="true"), generated_at:$gen, files:$files}'
-}
-
-# medium_manifest_sign <dir> <private-key.pem>
-# Signs the manifest already present in <dir> with the offline key, writing the
-# detached signature into <dir>. Caller is responsible for the manifest already
-# being on disk and for mount rw-ness. Returns non-zero on any openssl failure.
-medium_manifest_sign() {
-    local dir="$1" key="$2"
-    openssl pkeyutl -sign -inkey "$key" -rawin \
-        -in "${dir}/${MEDIUM_MANIFEST_NAME}" \
-        -out "${dir}/${MEDIUM_SIG_NAME}"
 }
 
 # medium_manifest_verify_sig <dir> <public-key.pem>
@@ -140,6 +118,67 @@ medium_manifest_verify_set() {
     echo "$MM_OK"; return 0
 }
 
+# medium_manifest_verify_hashes <dir>
+# Checks every file named in the (already signature-verified, already
+# set-verified) manifest against its recorded SHA-256, re-reading from <dir>.
+# This is the INTEGRITY layer riding on the now-trusted hashes. Return code is
+# the signal; on the first mismatch it reports the offending file and stops.
+medium_manifest_verify_hashes() {
+    local dir="$1" name want got
+    while IFS=$'\t' read -r name want; do
+        [ -n "$name" ] || continue
+        got="$(sha256sum "${dir}/${name}" 2>/dev/null | awk '{print $1}')"
+        if [ "$got" != "$want" ]; then
+            echo "$MM_HASH_MISMATCH ${name}"; return 7
+        fi
+    done < <(jq -r '.files[] | "\(.name)\t\(.sha256)"' "${dir}/${MEDIUM_MANIFEST_NAME}")
+    echo "$MM_OK"; return 0
+}
+# <<< END REGION:medium-manifest-verify <<<
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PRODUCER-ONLY functions below. These run on the build/sign station, never on
+# the host, and are NOT part of the bundled region. They may use anything the
+# build station has.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# medium_manifest_build <dir> <commit> <dirty:true|false> <generated_at>
+# Walks <dir>, hashes each covered file, prints the manifest JSON on stdout.
+# Returns non-zero if the directory contains no covered files (a manifest over
+# nothing is never legitimate here and must not be signed).
+medium_manifest_build() {
+    local dir="$1" commit="$2" dirty="$3" gen="$4" entries count
+    entries="$(
+        medium_manifest_filelist "$dir" | while IFS= read -r name; do
+            # A name with a slash cannot occur from -printf '%f', but assert it
+            # so a future change to the walk cannot silently admit a path.
+            case "$name" in */*|"") echo "__BAD__"; break;; esac
+            local sum
+            sum="$(sha256sum "${dir}/${name}" | awk '{print $1}')"
+            jq -nc --arg n "$name" --arg s "$sum" '{name:$n, sha256:$s}'
+        done | jq -sc '.'
+    )"
+    case "$entries" in *__BAD__*) echo "[!] medium_manifest_build: path in filename" >&2; return 2;; esac
+    count="$(printf '%s' "$entries" | jq 'length')"
+    [ "$count" -ge 1 ] || { echo "[!] medium_manifest_build: no covered files" >&2; return 2; }
+    jq -n \
+        --arg ver "1" --arg commit "$commit" --arg dirty "$dirty" \
+        --arg gen "$gen" --argjson files "$entries" \
+        '{manifest_version:$ver, troskel_commit:$commit,
+          troskel_dirty:($dirty=="true"), generated_at:$gen, files:$files}'
+}
+
+# medium_manifest_sign <dir> <private-key.pem>
+# Signs the manifest already present in <dir> with the offline key, writing the
+# detached signature into <dir>. Caller is responsible for the manifest already
+# being on disk and for mount rw-ness. Returns non-zero on any openssl failure.
+medium_manifest_sign() {
+    local dir="$1" key="$2"
+    openssl pkeyutl -sign -inkey "$key" -rawin \
+        -in "${dir}/${MEDIUM_MANIFEST_NAME}" \
+        -out "${dir}/${MEDIUM_SIG_NAME}"
+}
+
 # medium_manifest_pubkey_fingerprint <key.pem> [pubin]
 # Prints a canonical fingerprint of a public key: the SHA-256 of its DER
 # encoding. This is immune to PEM formatting noise (trailing newlines, blank
@@ -177,21 +216,4 @@ medium_manifest_keypair_matches() {
     fp_priv="$(medium_manifest_pubkey_fingerprint "$priv")"
     fp_pub="$(medium_manifest_pubkey_fingerprint "$pub" pubin)"
     [ -n "$fp_priv" ] && [ -n "$fp_pub" ] && [ "$fp_priv" = "$fp_pub" ]
-}
-
-# medium_manifest_verify_hashes <dir>
-# Checks every file named in the (already signature-verified, already
-# set-verified) manifest against its recorded SHA-256, re-reading from <dir>.
-# This is the INTEGRITY layer riding on the now-trusted hashes. Return code is
-# the signal; on the first mismatch it reports the offending file and stops.
-medium_manifest_verify_hashes() {
-    local dir="$1" name want got
-    while IFS=$'\t' read -r name want; do
-        [ -n "$name" ] || continue
-        got="$(sha256sum "${dir}/${name}" 2>/dev/null | awk '{print $1}')"
-        if [ "$got" != "$want" ]; then
-            echo "$MM_HASH_MISMATCH ${name}"; return 7
-        fi
-    done < <(jq -r '.files[] | "\(.name)\t\(.sha256)"' "${dir}/${MEDIUM_MANIFEST_NAME}")
-    echo "$MM_OK"; return 0
 }
