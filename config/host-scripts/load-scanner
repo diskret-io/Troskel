@@ -88,8 +88,14 @@ medium_integrity_or_die() {
 if [ -f "$BAKED_KEY_PATH" ]; then
     # SIGNING host: signature is mandatory.
     echo "[*] Authenticity: SIGNING host; verifying data-USB signature..."
-    SIG_TOK="$(medium_manifest_verify_sig "$MOUNT" "$BAKED_KEY_PATH")"
-    SIG_RC=$?
+    # verify_sig returns non-zero on any refusal (wrong key, missing, malformed).
+    # Capture its token and rc WITHOUT letting set -e abort the script at the
+    # assignment: a bare `SIG_TOK="$(...)"; SIG_RC=$?` aborts here under set -e
+    # before the refusal branch runs, which would make the host exit silently
+    # with no reason. The `|| SIG_RC=$?` form suppresses set -e for this call and
+    # captures the real return code, so the case block below can report why.
+    SIG_RC=0
+    SIG_TOK="$(medium_manifest_verify_sig "$MOUNT" "$BAKED_KEY_PATH")" || SIG_RC=$?
     if [ "$SIG_RC" -ne 0 ]; then
         case "$SIG_TOK" in
             "$MM_MISSING_SIG")
