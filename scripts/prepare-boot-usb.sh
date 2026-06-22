@@ -10,10 +10,20 @@
 # repo. The plaintext passphrase is printed to the admin's terminal once
 # at the end of the build and is not stored anywhere.
 #
+# Also embeds the data-USB authenticity gate's verifier key (on a SIGNING
+# build) and splices shared shell regions into the host scripts. ALL build-time
+# mutations happen in a writable copy of config/ under $BUILD; the committed
+# tree is never altered. See docs/medium-authenticity-contract.md.
+#
 # Requires: butane, openssl, shuf (coreutils), docker
 # Requires: config/eff-large-wordlist.txt (download from https://www.eff.org/dice
 #           and place at the path; see THIRD_PARTY_NOTICES.md)
 # Usage: sudo bash scripts/prepare-boot-usb.sh /dev/sdX
+#
+# Authenticity-gate environment (see boot_sign_resolve_mode):
+#   TROSKEL_SIGN_PUBKEY=/path/to/pub   build a SIGNING host trusting this key
+#   TROSKEL_ALLOW_UNSIGNED=1           build a PERMISSIVE host (no verification)
+#   (exactly one must be set; neither or both aborts the build)
 set -euo pipefail
 
 USB_DEV="${1:?Usage: prepare-boot-usb.sh <device> e.g. /dev/sdb}"
@@ -29,22 +39,32 @@ source "${SCRIPT_DIR}/../config/versions.env"
 # shellcheck source=lib/passphrase-banner.sh
 source "${SCRIPT_DIR}/lib/passphrase-banner.sh"
 
-# Data-USB authenticity gate: host-type decision and verifier-key embedding.
-# medium-manifest.sh provides the canonical key fingerprint shared with the
-# signer; boot-sign-key.sh decides SIGNING vs PERMISSIVE and bakes (or omits)
-# the verifier key. See docs/medium-authenticity-contract.md.
+# Data-USB authenticity gate. medium-manifest.sh provides the canonical key
+# fingerprint shared with the signer; boot-sign-key.sh decides SIGNING vs
+# PERMISSIVE and bakes (or omits) the verifier key; splice-region.sh bundles
+# shared host verification code into the host scripts at build time. See
+# docs/medium-authenticity-contract.md.
 # shellcheck source=lib/medium-manifest.sh
 source "${SCRIPT_DIR}/lib/medium-manifest.sh"
 # shellcheck source=lib/boot-sign-key.sh
 source "${SCRIPT_DIR}/lib/boot-sign-key.sh"
+# shellcheck source=lib/splice-region.sh
+source "${SCRIPT_DIR}/lib/splice-region.sh"
 
-CONFIG="${SCRIPT_DIR}/../config/scanner-host.bu"
-CONFIG_DIR="${SCRIPT_DIR}/../config"
-WORDLIST="${SCRIPT_DIR}/../config/eff-large-wordlist.txt"
+SRC_CONFIG_DIR="${SCRIPT_DIR}/../config"
+WORDLIST="${SRC_CONFIG_DIR}/eff-large-wordlist.txt"
 BUILD="$(mktemp -d --tmpdir fc-boot-XXXXXX)"
 
 cleanup() { rm -rf "$BUILD"; }
 trap cleanup EXIT
+
+# Writable build copy of config/. ALL build-time mutations (passphrase hash,
+# verifier-key entry, host-script region splice) happen in this copy, never in
+# the committed tree. Butane is pointed here, so the baked artefacts are the
+# mutated build copies and the committed config/ is never altered.
+CONFIG_DIR="${BUILD}/config"
+cp -r "$SRC_CONFIG_DIR" "$CONFIG_DIR"
+CONFIG="${CONFIG_DIR}/scanner-host.bu"
 
 [ -f "$CONFIG" ] \
     || { echo "[!] Butane config not found: $CONFIG"; exit 1; }
@@ -54,6 +74,22 @@ trap cleanup EXIT
          echo "    Download the EFF Long Wordlist from https://www.eff.org/dice"; \
          echo "    and place it at the path above. See THIRD_PARTY_NOTICES.md."; \
          exit 1; }
+
+# Resolve the host's authenticity posture BEFORE any expensive work (the ISO
+# download), so an ambiguous invocation fails fast rather than after a
+# multi-hundred-MB download. boot_sign_resolve_mode prints "signing <path>" or
+# "permissive", or aborts non-zero with guidance.
+SIGN_MODE_LINE="$(boot_sign_resolve_mode)" || exit 1
+SIGN_MODE="${SIGN_MODE_LINE%% *}"
+SIGN_KEY=""
+if [ "$SIGN_MODE" = "signing" ]; then
+    SIGN_KEY="${SIGN_MODE_LINE#signing }"
+    echo "[*] Authenticity gate: SIGNING host (verifier key ${SIGN_KEY})."
+else
+    echo "[!] Authenticity gate: PERMISSIVE host. This host will NOT verify"
+    echo "    data-USB authenticity. Set TROSKEL_SIGN_PUBKEY to build a signing"
+    echo "    host. (Proceeding because TROSKEL_ALLOW_UNSIGNED is set.)"
+fi
 
 # Docker is required.
 if command -v docker >/dev/null 2>&1; then
@@ -67,22 +103,6 @@ echo "[*] Using container runtime: ${CONTAINER_RUNTIME}"
 
 COREOS_IMAGE="quay.io/coreos/coreos-installer:${COREOS_INSTALLER_TAG}"
 COREOS_INSTALLER="${CONTAINER_RUNTIME} run --security-opt label=disable --pull=always --rm -v ${BUILD}:/data -w /data ${COREOS_IMAGE}"
-
-# Decide the host's authenticity posture before any expensive work, so an
-# ambiguous invocation (no key and no explicit opt-out, or both at once) fails
-# fast rather than after a multi-hundred-MB ISO download. boot_sign_resolve_mode
-# prints "signing <path>" or "permissive", or aborts non-zero with guidance.
-SIGN_MODE_LINE="$(boot_sign_resolve_mode)" || exit 1
-SIGN_MODE="${SIGN_MODE_LINE%% *}"
-SIGN_KEY=""
-if [ "$SIGN_MODE" = "signing" ]; then
-    SIGN_KEY="${SIGN_MODE_LINE#signing }"
-    echo "[*] Authenticity gate: SIGNING host (verifier key ${SIGN_KEY})."
-else
-    echo "[!] Authenticity gate: PERMISSIVE host. This host will NOT verify"
-    echo "    data-USB authenticity. Set TROSKEL_SIGN_PUBKEY to build a signing"
-    echo "    host. (Proceeding because TROSKEL_ALLOW_UNSIGNED is set.)"
-fi
 
 # --- Passphrase generation ------------------------------------------------
 # Four-word diceware from the EFF Long Wordlist. ~51.6 bits of entropy
@@ -99,18 +119,40 @@ echo "[*] Generating scanner-user passphrase..."
 PASSPHRASE="$(shuf -n 4 "$WORDLIST" | cut -f2 | paste -sd-)"
 PASSWORD_HASH="$(openssl passwd -6 "$PASSPHRASE")"
 
-# Substitute the sentinel in a temp copy. Crypt strings contain $ and /,
-# so we use | as the sed delimiter rather than the conventional /.
-CONFIG_BUILD="${BUILD}/scanner-host.bu"
-sed "s|@@SCANNER_PASSWORD_HASH@@|${PASSWORD_HASH}|" "$CONFIG" > "$CONFIG_BUILD"
+# Substitute the passphrase sentinel in the build-copy config. Crypt strings
+# contain $ and /, so we use | as the sed delimiter rather than the
+# conventional /. (CONFIG is already the build copy; we edit it in place.)
+CONFIG_BUILD="$CONFIG"
+sed -i "s|@@SCANNER_PASSWORD_HASH@@|${PASSWORD_HASH}|" "$CONFIG_BUILD"
 
-# Inject or remove the verifier-key storage.files entry in the build copy.
-# SIGNING bakes the key at /etc/troskel/sign.pub and copies it into the
-# files-dir; PERMISSIVE removes the sentinel so no key is baked. The committed
-# config carries only the @@SIGN_PUBKEY_FILE_ENTRY@@ sentinel; Butane never
-# sees it because substitution happens here, before --check below.
+# Inject or remove the verifier-key storage.files entry in the build-copy
+# config. SIGNING bakes the key at /etc/troskel/sign.pub and copies it into the
+# files-dir; PERMISSIVE removes the marker so no key is baked. The committed
+# config carries only the marker comment; Butane never sees an unsubstituted
+# marker because this runs before --check below.
 boot_sign_apply_mode "$SIGN_MODE" "$SIGN_KEY" "$CONFIG_BUILD" "$CONFIG_DIR" \
     || { echo "[!] Failed to apply authenticity-gate key entry."; exit 1; }
+
+# Bundle shared shell regions into the host scripts in the build copy. The
+# committed host scripts carry @@REGION:<name>@@ markers; the build splices the
+# canonical region from its lib in place of each marker, so the baked host
+# script is self-contained (the host has no scripts/lib). A splice failure
+# (missing region, missing or duplicate marker) aborts the build.
+echo "[*] Bundling shared regions into host scripts..."
+LOAD_SCANNER_BUILD="${CONFIG_DIR}/host-scripts/load-scanner"
+splice_region "${SCRIPT_DIR}/lib/medium-manifest.sh" medium-manifest-verify \
+    "$LOAD_SCANNER_BUILD" > "${LOAD_SCANNER_BUILD}.spliced" \
+    || { echo "[!] Region splice failed for load-scanner."; exit 1; }
+mv "${LOAD_SCANNER_BUILD}.spliced" "$LOAD_SCANNER_BUILD"
+chmod 0755 "$LOAD_SCANNER_BUILD"
+# Post-condition: the marker must be gone and the region present, or we would
+# bake an incomplete host script. Verifies the produced artefact, not the input.
+if grep -q '@@REGION:medium-manifest-verify@@' "$LOAD_SCANNER_BUILD"; then
+    echo "[!] load-scanner still carries an unspliced region marker; aborting."; exit 1
+fi
+if ! grep -q 'medium_manifest_verify_sig()' "$LOAD_SCANNER_BUILD"; then
+    echo "[!] load-scanner is missing the spliced verification region; aborting."; exit 1
+fi
 
 echo "[*] Checking Butane config..."
 butane --check --files-dir "$CONFIG_DIR" "$CONFIG_BUILD" \
@@ -121,13 +163,13 @@ butane --pretty --strict --files-dir "$CONFIG_DIR" "$CONFIG_BUILD" \
     > "${BUILD}/ignition.json"
 echo "[+] Ignition JSON written ($(wc -c < "${BUILD}/ignition.json") bytes)"
 
-# Post-compile drift check: the key actually baked into the Ignition must match
-# the source key (SIGNING) or be absent (PERMISSIVE). Verifies against the
-# produced artefact, not the source, so a stale or mangled key cannot ship. A
-# mismatch aborts before the ISO is downloaded or written.
+# Post-compile drift check: the verifier key actually baked into the Ignition
+# must match the source key (SIGNING) or be absent (PERMISSIVE). Verifies against
+# the produced artefact, not the source, so a stale or mangled key cannot ship.
+# A mismatch aborts before the ISO is downloaded or written.
 boot_sign_verify_drift "$SIGN_MODE" "$SIGN_KEY" "${BUILD}/ignition.json" \
     || { echo "[!] Authenticity-gate drift check failed; aborting build."; exit 1; }
-    
+
 echo "[*] Downloading CoreOS ${COREOS_STREAM} ISO..."
 $COREOS_INSTALLER download \
     --stream "${COREOS_STREAM}" \
@@ -136,7 +178,7 @@ $COREOS_INSTALLER download \
     --directory /data
 
 ISO="$(ls "${BUILD}"/*.iso | head -1)"
-[ -f "$ISO" ] || { echo "[!] ISO download failed — no .iso found in ${BUILD}"; exit 1; }
+[ -f "$ISO" ] || { echo "[!] ISO download failed, no .iso found in ${BUILD}"; exit 1; }
 echo "[+] ISO: $(basename "$ISO")"
 
 echo "[*] Embedding Ignition config into ISO..."
@@ -187,7 +229,7 @@ udevadm settle
 STILL_MOUNTED="$(findmnt -no TARGET,SOURCE \
     | awk -v dev="$(basename "$USB_DEV")" '$2 ~ dev {print}')"
 if [ -n "$STILL_MOUNTED" ]; then
-    echo "[!] Cannot release ${USB_DEV} — partitions still mounted:" >&2
+    echo "[!] Cannot release ${USB_DEV}, partitions still mounted:" >&2
     echo "$STILL_MOUNTED" | sed 's/^/      /' >&2
     echo "" >&2
     if command -v fuser >/dev/null 2>&1; then

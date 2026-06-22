@@ -17,6 +17,11 @@ ETC_ISSUE="${ETC_ISSUE:-/etc/issue}"
 # unset: we create a temp dir and mount the USB read-only onto it.
 TEST_MOUNT="${MOUNT:-}"
 MOUNT="${MOUNT:-$(mktemp -d)}"
+# BAKED_KEY_PATH is the verifier public key baked into the boot image on a
+# SIGNING build (absent on a PERMISSIVE build). Overridable only so
+# tests/test-load-scanner-authenticity.sh can point at a fixture key. Production
+# leaves it unset, so the default applies. Its PRESENCE selects host type.
+BAKED_KEY_PATH="${BAKED_KEY_PATH:-/etc/troskel/sign.pub}"
 echo "[*] Loading scanner from data USB..."
 if [ -z "$TEST_MOUNT" ]; then
     mount -o ro "$DATA_USB" "$MOUNT" \
@@ -29,6 +34,107 @@ cleanup_mount() {
     [ -z "$TEST_MOUNT" ] && umount "$MOUNT"
     return 0
 }
+
+# ── Data-USB authenticity gate ───────────────────────────────────────────────
+#
+# CONTRACT (consumer side): the signed medium manifest (medium-manifest.json)
+# and its detached signature (medium-manifest.json.sig) are produced by
+# scripts/sign-data-usb.sh on the admin's offline signing machine, with the
+# private half of a keypair whose public half is baked into this host's boot ISO
+# at BAKED_KEY_PATH by scripts/lib/boot-sign-key.sh. The full behavioural
+# contract is docs/medium-authenticity-contract.md; this block is its load-time
+# row.
+#
+# Host type is determined by the PRESENCE of the baked verifier key:
+#   key present -> SIGNING: a valid signature matching the baked key is REQUIRED.
+#                  Unsigned, wrong-key, malformed, set-mismatch, or hash-mismatch
+#                  media are refused and the scanner is NOT loaded.
+#   key absent  -> PERMISSIVE: authenticity cannot be verified; this is announced
+#                  on EVERY load. A signed medium still has its integrity (file
+#                  set + hashes) checked, and an integrity failure is refused; an
+#                  unsigned medium loads with a notice. A PERMISSIVE host cannot
+#                  detect the substitution attack, by construction.
+#
+# The verification functions are BUNDLED below from the
+# REGION:medium-manifest-verify block in scripts/lib/medium-manifest.sh.
+# scripts/prepare-boot-usb.sh splices that region in place of the marker line at
+# build time (the host has no scripts/lib to source). The committed script
+# carries ONLY the marker; the build produces the complete script. Do NOT paste
+# the functions here by hand: edit the lib region and the build re-splices. See
+# scripts/lib/splice-region.sh.
+#
+# Runs BEFORE any cp from the medium: on refusal the script exits non-zero
+# having copied nothing, so a rejected medium leaves $DEST untouched.
+
+# @@REGION:medium-manifest-verify@@
+
+# medium_integrity_or_die <dir> : run set + hash checks, refuse on failure. Used
+# by BOTH host types once a manifest is known present and (on SIGNING)
+# signature-verified. Integrity needs no key, so a PERMISSIVE host runs it too.
+medium_integrity_or_die() {
+    local dir="$1" tok
+    tok="$(medium_manifest_verify_set "$dir")" || {
+        echo "[!] Data USB REFUSED: file set does not match the signed manifest (${tok})." >&2
+        echo "    A file was added to or removed from the medium after signing." >&2
+        cleanup_mount; exit 1
+    }
+    tok="$(medium_manifest_verify_hashes "$dir")" || {
+        echo "[!] Data USB REFUSED: a file's contents do not match the signed manifest" >&2
+        echo "    (${tok}). The medium was altered after signing." >&2
+        cleanup_mount; exit 1
+    }
+}
+
+if [ -f "$BAKED_KEY_PATH" ]; then
+    # SIGNING host: signature is mandatory.
+    echo "[*] Authenticity: SIGNING host; verifying data-USB signature..."
+    SIG_TOK="$(medium_manifest_verify_sig "$MOUNT" "$BAKED_KEY_PATH")"
+    SIG_RC=$?
+    if [ "$SIG_RC" -ne 0 ]; then
+        case "$SIG_TOK" in
+            "$MM_MISSING_SIG")
+                echo "[!] Data USB REFUSED: medium is unsigned; this host requires signed" >&2
+                echo "    media. Sign it on the build station with sign-data-usb.sh." >&2 ;;
+            "$MM_BAD_SIG")
+                echo "[!] Data USB REFUSED: signature does not match this host's trusted" >&2
+                echo "    key. The medium was signed by a different key, or substituted." >&2 ;;
+            "$MM_MALFORMED")
+                echo "[!] Data USB REFUSED: medium manifest is malformed or unparseable." >&2 ;;
+            *)
+                echo "[!] Data USB REFUSED: signature verification failed (${SIG_TOK})." >&2 ;;
+        esac
+        cleanup_mount
+        exit 1
+    fi
+    medium_integrity_or_die "$MOUNT"
+    echo "[+] Authenticity verified: signature matches this host's trusted key."
+else
+    # PERMISSIVE host: announce on every load, then check what we can.
+    echo "[!] Authenticity enforcement is OFF on this host (no verifier key baked"
+    echo "    into the boot image). This host CANNOT verify that a data USB came"
+    echo "    from your build station. To enforce authenticity, rebuild the boot"
+    echo "    ISO with TROSKEL_SIGN_PUBKEY set. See the operator guide."
+    if [ -f "$MOUNT/$MEDIUM_MANIFEST_NAME" ]; then
+        echo "[*] Medium is signed, but no key is present to verify authenticity;"
+        echo "    checking integrity (file set and hashes) only."
+        # Malformed manifest on a permissive host: integrity cannot be trusted
+        # either (the file list is unreadable), so refuse rather than load blind.
+        if ! jq -e '.manifest_version == "1" and (.files|type=="array") and (.files|length>=1)' \
+                "$MOUNT/$MEDIUM_MANIFEST_NAME" >/dev/null 2>&1; then
+            echo "[!] Data USB REFUSED: medium manifest is malformed; integrity cannot" >&2
+            echo "    be checked. Refusing to load even on a permissive host." >&2
+            cleanup_mount
+            exit 1
+        fi
+        medium_integrity_or_die "$MOUNT"
+        echo "[+] Integrity verified (authenticity NOT verified: no key on this host)."
+    else
+        echo "[*] Medium is unsigned; loading without any authenticity or manifest"
+        echo "    integrity check (permissive host)."
+    fi
+fi
+# ── end authenticity gate ────────────────────────────────────────────────────
+
 mkdir -p "$DEST"
 cp "$MOUNT/scanner-rootfs.ext4" "$DEST/"
 cp "$MOUNT/vmlinux"             "$DEST/"
@@ -46,6 +152,12 @@ cp "$MOUNT/scanner.env"         "$DEST/"
 # VM runs, so it MUST be verified before it is trusted, and verification MUST
 # re-read the copy under $DEST (the bytes that will execute), not the USB.
 #
+# This is now SUBORDINATE to the authenticity gate above: on a SIGNING host the
+# medium has already been proven authentic and intact (the rootfs hash is in the
+# signed manifest), so this sidecar check is a redundant but cheap second line.
+# On a PERMISSIVE host it remains the only integrity check on the rootfs for an
+# unsigned medium. It is retained unchanged for both reasons.
+#
 # This duplicates the verify-artefact.sh logic rather than sourcing it because
 # that module is not yet shipped to the CoreOS host image (no plumbing exists
 # to place it there; see the sign-data-usb-manifest / verify-artefact host
@@ -62,12 +174,6 @@ cp "$MOUNT/scanner.env"         "$DEST/"
 # warning), the rootfs is the executable image, so a corrupt or unverifiable
 # rootfs must never be loaded. On failure the bad copy is removed and the
 # script exits non-zero.
-#
-# NOTE: this verifies INTEGRITY only (bytes intact). It does not establish
-# AUTHENTICITY (that the image came from this build station); a co-resident
-# sidecar can be recomputed by anyone who can rewrite the medium. Authenticity
-# is the sign-data-usb-manifest card, which adds a signature gate ahead of
-# this check.
 ROOTFS="$DEST/scanner-rootfs.ext4"
 SIDECAR_SRC="$MOUNT/scanner-rootfs.ext4.sha256"
 if [ -f "$SIDECAR_SRC" ]; then
@@ -129,7 +235,8 @@ fi
 # than sourced. The region between the BEGIN/END sentinels must stay
 # byte-identical to the lib and to show-status's copy;
 # tests/test-manifest-propagation.sh enforces that. Do not hand-edit it here:
-# change the lib, then re-vendor.
+# change the lib, then re-vendor. (This region is a candidate for migration to
+# the build-time splice mechanism; see the bundle-vendored-regions card.)
 #
 # Absence is tolerated here, unlike at write time: a data USB written before
 # manifests existed legitimately has none, and the scanner must still load.
@@ -137,8 +244,8 @@ fi
 # does not carry the fields show-status reads is reported, so the operator sees
 # "manifest unreadable" rather than show-status quietly printing "unknown" as
 # though the USB were simply old. The manifest is operational metadata, not a
-# security gate (signed-manifest verification is future Tier 2 work), so a
-# corrupt manifest is a visible warning, not a refusal to load the scanner:
+# security gate (signed-manifest verification is the authenticity gate above),
+# so a corrupt manifest is a visible warning, not a refusal to load the scanner:
 # refusing to boot over bad metadata would be the wrong failure mode.
 # >>> BEGIN manifest-parse vendored region (keep byte-identical across copies) >>>
 _manifest_extract_str() {  # _manifest_extract_str <key> <path> -> quoted-string value or empty
