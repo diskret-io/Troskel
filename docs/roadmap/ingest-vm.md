@@ -130,7 +130,7 @@ Recommendation: Option A. The vsock channel is constrained by construction to "g
 - **`tests/test-scan.sh` needs an ingest-failure path.** A new fixture — a file USB image that the ingest guest cannot mount, or one whose tree exceeds the configured limits — should produce a yellow verdict at the operator level. The existing red and green paths are unaffected because they operate on the post-ingest image, which is byte-for-byte equivalent to today's `scanfiles.ext4`.
 - **Operator-guide updates.** The supported-filesystems section changes; the "any filesystem the scanning host can mount" sentence goes away; the multi-USB section is rewritten to describe the new explicit-selection flow.
 - **SBOM additions.** The ingest rootfs needs its own SBOM component entries (busybox, debian-base, kernel modules for the supported filesystems).
-- **Boot-time presence checks.** `check-system-ready` and the pre-login banner (`definition-version-display.md`) both already display loaded-image state. The ingest image should join the set displayed.
+- **Boot-time presence checks.** check-system-ready and the pre-login banner (the signature-date display, shipped) both already display loaded-image state.
 
 ## What stays the same
 

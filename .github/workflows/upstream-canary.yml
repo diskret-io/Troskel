@@ -8,7 +8,7 @@
 #     Catches the common failure modes: URL renamed, asset deleted,
 #     repository moved, registry down.
 #   - full-build:   every Monday at 07:13 UTC. Slow (~15-20 min). Runs
-#     `make build` end-to-end inside the Troskel container, exercising
+#     `make test-build` end-to-end inside the Troskel container, exercising
 #     every download path and the debootstrap pipeline. Catches the
 #     subtler cases the reachability tier cannot see: tarball that
 #     downloads but no longer extracts, freshclam DB layout change,
@@ -136,13 +136,13 @@ jobs:
           large-packages: false   # slow; not worth it
           swap-storage: false
 
-      # `make build` requires a privileged container (debootstrap,
+      # `make test-build` requires a privileged container (debootstrap,
       # mkfs.ext4, mounts). The Makefile already wraps this; we just
       # invoke it. The Makefile's `image` target builds the troskel-build
       # container from the in-repo Dockerfile, so no separate setup is
       # needed.
       - name: Run full build inside container
-        run: make build
+        run: make test-build
 
       - name: Open or update issue on failure
         if: failure()
@@ -159,14 +159,14 @@ jobs:
               ``,
               `Run: ${RUN_URL}`,
               ``,
-              `The reachability tier passed but the full build did not. Likely causes:`,
+              `The reachability tier passed but the full test-build did not. Likely causes:`,
               `- An upstream tarball downloads but no longer extracts cleanly.`,
               `- ClamAV freshclam DB layout changed or signing key rotated.`,
               `- LOKI-RS \`loki-util update\` is failing or YARA Forge schema changed.`,
               `- A glibc / Debian \`${process.env.GITHUB_REF_NAME || 'trixie'}\` bump broke a pinned binary.`,
               `- Firecracker CI kernel for the current series rotated to an incompatible patch.`,
               ``,
-              `Open the run log and look at the failing \`make build\` step.`,
+              `Open the run log and look at the failing \`make test-build\` step.`,
               `Re-run manually from the Actions tab once the cause is identified.`,
             ].join('\n');
 

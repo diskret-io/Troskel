@@ -1,19 +1,19 @@
 ---
 id: "tier-2-remediation-plan-2026-06-17"
-status: "todo"
-priority: "medium"
+status: "in-progress"
+priority: "high"
 assignee: "k"
 epic: null
 dueDate: null
 created: "2026-06-17T18:50:48.771Z"
-modified: "2026-06-20T13:30:56.073Z"
+modified: "2026-06-21T20:46:29.187Z"
 completedAt: null
 labels: ["security", "epic"]
-order: "a2"
+order: "Zz"
 ---
 # Tier 2 remediation: epic
 
-The roadmap doc captures what is required for Troskel to claim a Tier 2 (ISO/IEC 27001 / mid-market enterprise) security posture. At 0.9.0 / 1.0.0 the project is explicitly sub-Tier-2: it is a demonstrator / evaluation-grade tool, not a production deployment for regulated environments. This epic is the path from there to Tier 2.
+The roadmap doc captures what is required for Troskel to claim a Tier 2 (ISO/IEC 27001 / mid-market enterprise) security posture. Until then it is a demonstrator / evaluation-grade tool, not a production deployment for regulated environments.
 
 Roadmap doc: `docs/roadmap/security/tier-2-remediation-plan.md`.
 

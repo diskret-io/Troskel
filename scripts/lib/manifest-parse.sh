@@ -15,9 +15,14 @@
 # -------------------------------------------------------------------------
 # The manifest is produced by scripts/generate-build-records.sh and written to
 # the data USB by scripts/prepare-data-usb.sh, which verifies it against the USB
-# at write time (sha256 byte-identity plus a jq field-presence predicate). The
-# build station has jq; the scanning host does not, so host verification is
-# grep/sed only, defined here. The field set MUST stay in step with the jq
+# at write time (sha256 byte-identity plus a jq field-presence predicate). 
+# This grep/sed parser predates the data-USB authenticity gate, which
+# established that jq IS present on the scanning host (it ships in the pinned
+# Fedora CoreOS base image and is asserted, with a version floor, by
+# check-system-ready). The parser is retained because it is correct, tested,
+# and vendored with no added dependency; new host-side manifest logic (see
+# scripts/lib/medium-manifest.sh) uses jq directly. Host verification here
+# remains grep/sed. The field set MUST stay in step with the jq
 # predicate in prepare-data-usb.sh: if generate-build-records.sh adds or renames
 # a build-identity field the host displays, change the matcher here AND that
 # predicate together, then re-vendor (the drift test will fail until you do), or

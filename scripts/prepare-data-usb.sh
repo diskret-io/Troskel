@@ -161,9 +161,12 @@ cp "$SCANNER_ENV" "${MOUNT}/scanner.env"
 # The destination verification below re-reads the copy from the mounted USB
 # (not from source) and checks both byte-identity (sha256) and parseability
 # (jq), per the destructive-operations rule: a write whose result is not
-# re-read from the destination is not verified. The build container has jq;
-# the scanning host does not, which is why load-scanner and show-status parse
-# with grep/sed instead. If the manifest's field names or nesting change in
+# re-read from the destination is not verified. The build container has jq, 
+# and so does the scanning host (pinned CoreOS base image, asserted by 
+# check-system-ready). load-scanner and show-status
+# parse build-manifest.json with vendored grep/sed regardless: that parser
+# predates the jq-on-host guarantee, is tested, and adds no dependency, so it
+# was kept. New host-side manifest logic uses jq. If the manifest's field names or nesting change in
 # generate-build-records.sh, the host-side extractors must change too; the
 # regression test tests/test-manifest-propagation.sh guards the round trip.
 cp "${SIGDIR}/build-manifest.json" "$MOUNT/"
@@ -195,8 +198,10 @@ fi
 #   (2) jq parses the USB copy and the fields the scanning host will read are
 #       present and non-empty. Catches a copy that is byte-identical to a
 #       source that was itself corrupt, and a manifest whose structure has
-#       drifted from what show-status extracts. jq is available in the build
-#       container; the scanning host parses with grep/sed (no jq there).
+#       drifted from what show-status extracts. jq is available in the build 
+#       container and on the scanning host (pinned CoreOS base image); the host's 
+#       build-manifest.json parse nonetheless uses vendored grep/sed, a pre-existing 
+#       tested path kept to avoid churn.
 # Field set mirrors what config/host-scripts/show-status reads: generated_at
 # (top-level) and build_environment.troskel_commit / .troskel_dirty. If
 # show-status starts reading a new field, add it here so a manifest missing

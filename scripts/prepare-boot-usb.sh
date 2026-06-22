@@ -29,6 +29,15 @@ source "${SCRIPT_DIR}/../config/versions.env"
 # shellcheck source=lib/passphrase-banner.sh
 source "${SCRIPT_DIR}/lib/passphrase-banner.sh"
 
+# Data-USB authenticity gate: host-type decision and verifier-key embedding.
+# medium-manifest.sh provides the canonical key fingerprint shared with the
+# signer; boot-sign-key.sh decides SIGNING vs PERMISSIVE and bakes (or omits)
+# the verifier key. See docs/medium-authenticity-contract.md.
+# shellcheck source=lib/medium-manifest.sh
+source "${SCRIPT_DIR}/lib/medium-manifest.sh"
+# shellcheck source=lib/boot-sign-key.sh
+source "${SCRIPT_DIR}/lib/boot-sign-key.sh"
+
 CONFIG="${SCRIPT_DIR}/../config/scanner-host.bu"
 CONFIG_DIR="${SCRIPT_DIR}/../config"
 WORDLIST="${SCRIPT_DIR}/../config/eff-large-wordlist.txt"
@@ -59,6 +68,22 @@ echo "[*] Using container runtime: ${CONTAINER_RUNTIME}"
 COREOS_IMAGE="quay.io/coreos/coreos-installer:${COREOS_INSTALLER_TAG}"
 COREOS_INSTALLER="${CONTAINER_RUNTIME} run --security-opt label=disable --pull=always --rm -v ${BUILD}:/data -w /data ${COREOS_IMAGE}"
 
+# Decide the host's authenticity posture before any expensive work, so an
+# ambiguous invocation (no key and no explicit opt-out, or both at once) fails
+# fast rather than after a multi-hundred-MB ISO download. boot_sign_resolve_mode
+# prints "signing <path>" or "permissive", or aborts non-zero with guidance.
+SIGN_MODE_LINE="$(boot_sign_resolve_mode)" || exit 1
+SIGN_MODE="${SIGN_MODE_LINE%% *}"
+SIGN_KEY=""
+if [ "$SIGN_MODE" = "signing" ]; then
+    SIGN_KEY="${SIGN_MODE_LINE#signing }"
+    echo "[*] Authenticity gate: SIGNING host (verifier key ${SIGN_KEY})."
+else
+    echo "[!] Authenticity gate: PERMISSIVE host. This host will NOT verify"
+    echo "    data-USB authenticity. Set TROSKEL_SIGN_PUBKEY to build a signing"
+    echo "    host. (Proceeding because TROSKEL_ALLOW_UNSIGNED is set.)"
+fi
+
 # --- Passphrase generation ------------------------------------------------
 # Four-word diceware from the EFF Long Wordlist. ~51.6 bits of entropy
 # (log2(7776^4) ≈ 51.7). Joined with hyphens for shell-friendliness.
@@ -79,6 +104,14 @@ PASSWORD_HASH="$(openssl passwd -6 "$PASSPHRASE")"
 CONFIG_BUILD="${BUILD}/scanner-host.bu"
 sed "s|@@SCANNER_PASSWORD_HASH@@|${PASSWORD_HASH}|" "$CONFIG" > "$CONFIG_BUILD"
 
+# Inject or remove the verifier-key storage.files entry in the build copy.
+# SIGNING bakes the key at /etc/troskel/sign.pub and copies it into the
+# files-dir; PERMISSIVE removes the sentinel so no key is baked. The committed
+# config carries only the @@SIGN_PUBKEY_FILE_ENTRY@@ sentinel; Butane never
+# sees it because substitution happens here, before --check below.
+boot_sign_apply_mode "$SIGN_MODE" "$SIGN_KEY" "$CONFIG_BUILD" "$CONFIG_DIR" \
+    || { echo "[!] Failed to apply authenticity-gate key entry."; exit 1; }
+
 echo "[*] Checking Butane config..."
 butane --check --files-dir "$CONFIG_DIR" "$CONFIG_BUILD" \
     || { echo "[!] Butane config failed validation."; exit 1; }
@@ -88,6 +121,13 @@ butane --pretty --strict --files-dir "$CONFIG_DIR" "$CONFIG_BUILD" \
     > "${BUILD}/ignition.json"
 echo "[+] Ignition JSON written ($(wc -c < "${BUILD}/ignition.json") bytes)"
 
+# Post-compile drift check: the key actually baked into the Ignition must match
+# the source key (SIGNING) or be absent (PERMISSIVE). Verifies against the
+# produced artefact, not the source, so a stale or mangled key cannot ship. A
+# mismatch aborts before the ISO is downloaded or written.
+boot_sign_verify_drift "$SIGN_MODE" "$SIGN_KEY" "${BUILD}/ignition.json" \
+    || { echo "[!] Authenticity-gate drift check failed; aborting build."; exit 1; }
+    
 echo "[*] Downloading CoreOS ${COREOS_STREAM} ISO..."
 $COREOS_INSTALLER download \
     --stream "${COREOS_STREAM}" \
