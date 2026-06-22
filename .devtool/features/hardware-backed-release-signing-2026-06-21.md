@@ -6,9 +6,9 @@ assignee: null
 epic: "tier-3-remediation-plan-2026-06-21"
 dueDate: null
 created: "2026-06-21T20:49:36.700Z"
-modified: "2026-06-21T20:49:49.045Z"
+modified: "2026-06-22T20:06:46.004Z"
 completedAt: null
-labels: ["security"]
+labels: ["security", "feature"]
 order: "ZzG"
 ---
 # Hardware-backed release signing

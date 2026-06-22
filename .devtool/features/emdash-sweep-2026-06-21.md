@@ -6,11 +6,11 @@ assignee: null
 epic: null
 dueDate: null
 created: "2026-06-21T15:55:06.418Z"
-modified: "2026-06-21T21:19:45.640Z"
+modified: "2026-06-22T20:05:17.103Z"
 completedAt: null
-labels: []
+labels: ["docs", "quality"]
 order: "a7"
 ---
 # Emdash sweep
 
-Move away from use of emdash.
+Fix emdash used in documentation.
