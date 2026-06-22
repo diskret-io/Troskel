@@ -49,6 +49,106 @@ sudo bash scripts/prepare-build-machine.sh
 
 After first-time setup, the regular workflow is `sudo bash scripts/troskel-build.sh`.
 
+## Data USB authenticity
+ 
+The scanning host can verify that a data USB (TROSKEL-DATA) was signed by you,
+not substituted by someone else. This is optional but recommended: without it,
+an attacker who can swap the data USB can feed the host a scanner image and
+definitions of their choosing, and the host has no way to tell. With it, the
+host refuses any data USB not signed by your key.
+ 
+This rests on a keypair you generate once. The private key signs data USBs and
+stays secret; the public key is baked into the boot USB and verifies signatures
+on the scanning host. They are a matched pair: only the private key can produce
+a signature the baked public key accepts.
+ 
+### One-time: generate your signing key
+ 
+```bash
+make gen-signing-key
+```
+ 
+This writes `keys/troskel-sign.key` (private, keep secret, back it up) and
+`keys/troskel-sign.pub` (public). If you lose the private key you cannot sign
+new media and must generate a new key and rebuild the boot USB (see Rotating the
+key below). Back the private key up somewhere safe and offline.
+ 
+### Building a signing host
+ 
+Build the boot USB with your public key, so the resulting host enforces
+authenticity:
+ 
+```bash
+sudo TROSKEL_SIGN_PUBKEY=keys/troskel-sign.pub bash scripts/prepare-boot-usb.sh /dev/sdX
+```
+ 
+The boot build refuses to proceed if you set neither `TROSKEL_SIGN_PUBKEY` nor
+`TROSKEL_ALLOW_UNSIGNED`, so you never accidentally build a host whose posture
+you did not choose. To deliberately build a host that does NOT verify
+authenticity (for testing, or if you do not want signing), set
+`TROSKEL_ALLOW_UNSIGNED=1` instead and provide no key. Such a host announces on
+every load that it is not enforcing authenticity.
+ 
+### Signing a data USB
+ 
+After `prepare-data-usb.sh` (or `troskel-build.sh`) has written a data USB, sign
+it:
+ 
+```bash
+sudo bash scripts/sign-data-usb.sh /dev/sdY keys/troskel-sign.key keys/troskel-sign.pub
+```
+ 
+The third argument (your public key) is optional but recommended: it lets the
+signer confirm the private key matches the key your host trusts, catching a
+key mix-up at your desk rather than as a baffling rejection at the air-gapped
+host. A signing host refuses any data USB that is unsigned, signed by a
+different key, or altered after signing.
+ 
+### Where the private key lives: three levels
+ 
+The location of the private key is your choice, traded off against how much you
+need to defend. From minimum to strongest:
+ 
+- Minimum (a working floor, not a recommendation): the private key is a file on
+  the build station, where `gen-signing-key` puts it. This is enough to defend
+  against a substituted data USB, the threat most deployments actually face. It
+  does NOT defend against an attacker who has already compromised the build
+  station itself: such an attacker can sign media with your key.
+- Better: keep the private key on a separate machine that is not networked,
+  carry the data USB to it for signing, and never let the key touch the build
+  station. This defends against build-station compromise.
+- Strongest: keep the private key on a hardware token from which it cannot be
+  extracted. `sign-data-usb.sh` takes the key path as an argument and does not
+  care where the key lives, so moving up these levels needs no code change, only
+  a different key location.
+Whichever level you choose, the scanning host is unaffected: it only ever holds
+the public key, baked into its boot image.
+ 
+### Rotating the key
+ 
+To change which key a host trusts (because the private key was lost, or you
+suspect it was exposed), you must rebuild the boot USB with the new public key
+and re-image the host from it. There is deliberately no way to update the
+trusted key on a running host: the key is part of the host's boot-time trust
+anchor, so changing it is as deliberate an act as first standing the host up.
+After rotating, re-sign your data USBs with the new private key; media signed
+with the old key will be refused.
+ 
+### What a refusal looks like
+ 
+On a signing host, a refused data USB stops the load with a specific reason:
+the medium is unsigned, the signature does not match the host's trusted key
+(a different key, or a substitution), the manifest is malformed, or a file was
+added, removed, or altered after signing. The scanner is not loaded and nothing
+is copied from the refused medium. If you see "signature does not match this
+host's trusted key" on a USB you signed yourself, you have a key mix-up: the
+private key you signed with does not correspond to the public key baked into
+that host. Re-sign with the matching key, or rebuild the host with the public
+half of the key you are signing with. (Passing your public key to
+`sign-data-usb.sh` as shown above prevents this.)
+ 
+The full behavioural specification is docs/medium-authenticity-contract.md.
+
 ## What troskel-build.sh actually does
 
 The phases that run depend on the mode. In the default `--usb-all` run they are:

@@ -52,11 +52,12 @@ Relationship to the verification work just completed:
   authenticity. They are rung 0 -> rung 1 on the integrity/authenticity
   ladder.
 - This card is rung 2/3: AUTHENTICITY over the medium's contents, via a
-  detached signature whose private half never sits on the build host and
-  whose public half is baked into the host image. It composes with the
-  integrity work rather than replacing it: the signed manifest carries
-  the per-file SHA-256s, the host verifies the signature once, then
-  trusts and checks those hashes with the existing module.
+  detached signature whose private half is held by the admin (see the
+  private-key tiers below for where) and whose public half is baked into 
+  the host image. It composes with the integrity work rather than replacing 
+  it: the signed manifest carries the per-file SHA-256s, the host verifies 
+  the signature once, then trusts and checks those hashes with the 
+  existing module.
 
 Why not heavier supply-chain machinery (Sigstore/cosign with a
 transparency log, a TUF repository): those solve key distribution and
@@ -92,9 +93,14 @@ air gap removes the problems the heavier tools exist to solve.
 At build time, the admin's signing key signs a manifest enumerating every
 file written to TROSKEL-DATA together with its SHA-256 (reuse the existing
 build-manifest.json content, or a signed superset of it, rather than
-inventing a second manifest). The private key never touches the build
-host: it lives on a hardware token or a separate offline machine, and the
-signing step is a deliberate, operator-mediated action.
+inventing a second manifest). The private key's location is the admin's
+choice across three documented tiers (docs/medium-authenticity-contract.md,
+Private-key handling tiers): minimum is a keyfile on the build station, which
+defends against a substituted medium but not against a compromised build
+station; better is a separate offline machine; strongest is a hardware token.
+The Tier 2 posture this card sits under assumes the off-host tiers; the shipped
+gate supports all three without code change, because the signer takes the key
+path as an argument. The signing step is a deliberate, operator-mediated action.
 
 The verifying public key (or its hash) is embedded in
 config/scanner-host.bu and therefore baked into the boot ISO's Ignition
