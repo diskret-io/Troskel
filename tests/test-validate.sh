@@ -281,7 +281,6 @@ expected troskel@${EXPECTED_VERSION} — regenerate SBOM on the build station" \
     fi
 fi
 
-
 # --- 6. Deprecated make aliases fail loudly (static check) --------------------
 # build, scan, and all were renamed. They are retained in the Makefile
 # only to emit a rename pointer and exit non-zero. This check validates

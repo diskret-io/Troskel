@@ -8,8 +8,9 @@
 #   make test-build  Tier 2: Full build pipeline. Needs --privileged.
 #   make test-scan   Tier 3: Firecracker scan test. Needs --privileged + /dev/kvm.
 #   make test        Validate + test-build + test-scan in sequence.
-#   make update      Refresh signatures and rebuild the scanner image.
-#   make clean       Remove the container image and build artefact volume.
+#   make update          Refresh signatures and rebuild the scanner image.
+#   make gen-signing-key Generate the data-USB signing keypair (host-direct).
+#   make clean           Remove the container image and build artefact volume.
 #
 # Deprecated aliases (build, scan, all) are retained as targets only to
 # emit a rename pointer and fail; see the bottom of this file.
@@ -66,8 +67,8 @@ RUN_BASE           := $(RUNTIME) $(RUN_FLAGS_BASE) $(IMAGE_NAME)
 RUN_PRIVILEGED     := $(RUNTIME) $(RUN_FLAGS_BASE) $(PRIV_FLAGS) $(IMAGE_NAME)
 RUN_PRIVILEGED_KVM := $(RUNTIME) $(RUN_FLAGS_BASE) $(PRIV_FLAGS) --device /dev/kvm $(IMAGE_NAME)
 
-.PHONY: image validate test-build test-scan test update clean check-kvm check-priv \
-        build scan all
+.PHONY: image validate test-build test-scan test update gen-signing-key clean \
+        check-kvm check-priv build scan all
 
 # Internal target: verify /dev/kvm is present before starting a scan.
 check-kvm:
@@ -109,6 +110,14 @@ image: Dockerfile $(VERSIONS)
 ## Update scanning files
 update: image
 	$(RUN_PRIVILEGED) bash scripts/run-update.sh
+
+## Generate the data-USB signing keypair. Host-direct (NOT containerised): the
+## private key must persist on the admin's own filesystem, and a key generated
+## inside an ephemeral --rm container would vanish. This is the one deliberate
+## exception to the containerised-pipeline convention; it needs only openssl on
+## the host. Override the output directory with KEYDIR=/path (default ./keys).
+gen-signing-key:
+	@bash scripts/gen-signing-key.sh "$(if $(KEYDIR),$(KEYDIR),./keys)"
 
 ## Tier 1: Butane validation + shellcheck. No privileges needed.
 validate: image

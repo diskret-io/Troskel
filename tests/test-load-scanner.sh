@@ -23,9 +23,25 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-LOAD_SCANNER="${PROJECT_ROOT}/config/host-scripts/load-scanner"
+LOAD_SCANNER_SRC="${PROJECT_ROOT}/config/host-scripts/load-scanner"
 
-[ -f "$LOAD_SCANNER" ] || { echo "[!] load-scanner not found at $LOAD_SCANNER"; exit 1; }
+[ -f "$LOAD_SCANNER_SRC" ] || { echo "[!] load-scanner not found at $LOAD_SCANNER_SRC"; exit 1; }
+
+# load-scanner is a build-time template: it carries an @@REGION:medium-manifest-
+# verify@@ marker that scripts/prepare-boot-usb.sh splices in from
+# scripts/lib/medium-manifest.sh before the script is baked into the boot image
+# (the host has no scripts/lib to source). The committed file is therefore not
+# directly runnable; references to the spliced names (MEDIUM_MANIFEST_NAME, the
+# MM_* tokens, the verify functions) are unbound until the splice runs. So this
+# test must splice exactly as the build does, then exercise the SPLICED script,
+# which is the one that actually ships. See scripts/lib/splice-region.sh and
+# docs/medium-authenticity-contract.md.
+# shellcheck source=../scripts/lib/splice-region.sh
+source "${PROJECT_ROOT}/scripts/lib/splice-region.sh"
+LOAD_SCANNER="$(mktemp)"
+splice_region "${PROJECT_ROOT}/scripts/lib/medium-manifest.sh" medium-manifest-verify \
+    "$LOAD_SCANNER_SRC" > "$LOAD_SCANNER" \
+    || { echo "[!] Failed to splice medium-manifest-verify region into load-scanner for test"; exit 1; }
 
 PASS=0
 fail() { echo "[FAIL] $1"; exit 1; }
@@ -33,7 +49,7 @@ pass() { echo "[PASS] $1"; PASS=$((PASS + 1)); }
 step() { echo ""; echo "=== $* ==="; }
 
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+trap 'rm -rf "$WORK" "$LOAD_SCANNER"' EXIT
 
 # Build a fixture "USB" (a populated directory) with the files load-scanner
 # copies. sidecar_mode controls the sidecar: good | corrupt-target | absolute

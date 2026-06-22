@@ -33,6 +33,14 @@ __pycache__/
 *.egg-info/
 .venv/
 
+# Signing keys for the data-USB authenticity gate. No key, public or private,
+# is ever committed: private keys are secret, public keys are the admin's
+# artefact, and all test keys are generated ephemerally in the tests' own temp
+# dirs (see tests/test-sign-data-usb.sh and tests/test-gen-signing-key.sh).
+*.key
+*.pub
+/keys/
+
 # Secrets: belt-and-braces guards. None of these should ever exist
 # in the repo, but if they do, git will refuse to track them.
 *.pem
