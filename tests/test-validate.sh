@@ -11,6 +11,8 @@
 #   4. run_step unit tests (scripts/lib/run-step.sh failure-mode discipline)
 #   4b. passphrase banner round-trip (scripts/lib/passphrase-banner.sh)
 #   4c. load-scanner banner + rootfs verification (host-scripts/load-scanner)
+#   4d. load-scanner authenticity gate (full host x medium state matrix)
+#   4e. Manifest propagation + parser-drift test
 #   5. SBOM.json product version matches versions.env
 #   6. Deprecated make aliases fail with a rename pointer; no phony
 #      target is declared without a recipe.
@@ -207,7 +209,25 @@ else
     cat /tmp/ls-out.txt | sed 's/^/         /'
 fi
 
-# --- 4d. manifest propagation + parser-drift test ----------------------------
+# --- 4d. load-scanner authenticity gate tests ----------------------------
+# A hermetic Tier 1 test driving the real (spliced) load-scanner through
+# every cell of the host x medium matrix from the medium-authenticity
+# contract. The headline case is the substitution attack: a signing host
+# must refuse a medium signed by any key other than the one baked into its
+# boot image, and must copy nothing on refusal. Also covers unsigned,
+# injected-file, content-swapped, and malformed media on a signing host, and
+# the permissive-host behaviour including its documented inability to detect
+# substitution. Splices the verify region exactly as prepare-boot-usb.sh
+# does, so it exercises the script that ships.
+echo "[*] Running load-scanner authenticity gate tests..."
+if bash "${SCRIPT_DIR}/test-load-scanner-authenticity.sh" > /tmp/ls-auth-out.txt 2>&1; then
+    result "ok" "load-scanner authenticity gate"
+else
+    result "load-scanner authenticity gate failed, see output below" "load-scanner authenticity gate"
+    cat /tmp/ls-auth-out.txt
+fi
+
+# --- 4e. manifest propagation + parser-drift test ----------------------------
 # Exercises build-manifest.json parsing on the host side (show-status display
 # states: valid / corrupt / absent, and the troskel_dirty unquoted-boolean
 # matcher) plus the vendored-region drift guard: scripts/lib/manifest-parse.sh

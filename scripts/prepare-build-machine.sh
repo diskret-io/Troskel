@@ -213,7 +213,7 @@ echo "=== Final check ==="
 echo ""
 
 FINAL_FAIL=0
-for CMD in debootstrap mkfs.ext4 losetup parted curl wget openssl xorriso sha256sum shellcheck freshclam unzip; do
+for CMD in debootstrap mkfs.ext4 losetup parted curl wget openssl jq xorriso sha256sum shellcheck freshclam unzip; do
     command -v "$CMD" >/dev/null 2>&1 && ok "$CMD" || { fail "$CMD still missing"; FINAL_FAIL=1; }
 done
 

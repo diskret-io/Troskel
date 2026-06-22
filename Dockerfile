@@ -41,6 +41,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         e2fsprogs \
         gnupg \
         iproute2 \
+        jq \
         openssl \
         parted \
         shellcheck \
